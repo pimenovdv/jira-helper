@@ -17,3 +17,7 @@ NEO4J_PASSWORD = "testpassword"
 OPENSEARCH_URL = "https://localhost:9200"
 OPENSEARCH_USER = "admin"
 OPENSEARCH_PASSWORD = "ComplexP@ssw0rd123!"
+
+DATABASE_URL = "postgresql+asyncpg://myuser:mypassword@localhost:5432/techleader"
+GITLAB_TRACKED_PROJECTS = "1,2,3"
+GITLAB_TRACKED_USERS = "user1,user2"
