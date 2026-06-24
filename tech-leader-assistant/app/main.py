@@ -2,13 +2,11 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from .clients import (
-    GitLabDummyClient,
-    JiraDummyClient,
-    ConfluenceDummyClient,
-    Neo4jDummyClient,
-    OpenSearchDummyClient
-)
+from .clients.gitlab_client import GitLabClient
+from .clients.jira_client import JiraClient
+from .clients.confluence_client import ConfluenceClient
+from .clients.neo4j_client import Neo4jClient
+from .clients.opensearch_client import OpenSearchClient
 
 app = FastAPI(title="Tech Leader Assistant API")
 
@@ -18,12 +16,12 @@ static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 @app.get("/api/health")
-async def health_check():
-    gitlab_client = GitLabDummyClient()
-    jira_client = JiraDummyClient()
-    confluence_client = ConfluenceDummyClient()
-    neo4j_client = Neo4jDummyClient()
-    opensearch_client = OpenSearchDummyClient()
+def health_check():
+    gitlab_client = GitLabClient()
+    jira_client = JiraClient()
+    confluence_client = ConfluenceClient()
+    neo4j_client = Neo4jClient()
+    opensearch_client = OpenSearchClient()
 
     return {
         "status": "active",
