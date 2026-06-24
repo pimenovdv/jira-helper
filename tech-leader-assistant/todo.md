@@ -37,10 +37,10 @@
 - [x] Implement simple HTML+JS frontend to visualize system statuses.
 
 ### Phase 2: Data Ingestion & Clients
-- [ ] Implement genuine `GitLabClient` with token authentication.
-- [ ] Implement genuine `JiraClient` and `ConfluenceClient`.
-- [ ] Implement `Neo4jClient` for graphing relationships (Task -> Branch -> Project).
-- [ ] Implement `OpenSearchClient` for document storage.
+- [x] Implement genuine `GitLabClient` with token authentication.
+- [x] Implement genuine `JiraClient` and `ConfluenceClient`.
+- [x] Implement `Neo4jClient` for graphing relationships (Task -> Branch -> Project).
+- [x] Implement `OpenSearchClient` for document storage.
 - [ ] Set up APScheduler jobs in FastAPI lifespan to run periodic ingestion tasks.
 
 ### Phase 3: Core Logic & Processing

@@ -10,7 +10,14 @@ This project is a Tech Leader Assistant using FastAPI.
 tech-leader-assistant/
 ├── app/
 │   ├── main.py        # FastAPI application and route definitions
-│   ├── clients.py     # Wrappers for external systems (GitLab, Jira, Neo4j, OpenSearch)
+│   ├── clients/       # Wrappers for external systems
+│       ├── __init__.py
+│       ├── base.py
+│       ├── gitlab_client.py
+│       ├── jira_client.py
+│       ├── confluence_client.py
+│       ├── neo4j_client.py
+│       ├── opensearch_client.py
 │   ├── static/        # Frontend assets (HTML, JS, CSS)
 │       ├── index.html
 │       ├── main.js
