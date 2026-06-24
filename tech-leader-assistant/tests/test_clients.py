@@ -70,3 +70,45 @@ def test_opensearch_ping(mocker):
     assert result["status"] == "ok"
     assert result["service"] == "OpenSearch"
     mock_instance.ping.assert_called_once()
+
+def test_get_project_branches(mocker):
+    mocker.patch('app.clients.settings.get', side_effect=lambda k: "dummy")
+    mock_gitlab = mocker.patch('app.clients.gitlab_client.gitlab.Gitlab')
+    mock_instance = mock_gitlab.return_value
+    mock_project = mocker.MagicMock()
+    mock_instance.projects.get.return_value = mock_project
+    mock_project.branches.list.return_value = ["branch1", "branch2"]
+
+    from app.clients.gitlab_client import GitLabClient
+    client = GitLabClient()
+    result = client.get_project_branches("1")
+
+    assert result == ["branch1", "branch2"]
+    mock_instance.projects.get.assert_called_once_with("1")
+    mock_project.branches.list.assert_called_once_with(all=True)
+
+def test_get_project_versions(mocker):
+    mocker.patch('app.clients.settings.get', side_effect=lambda k: "dummy")
+    mock_jira = mocker.patch('app.clients.jira_client.JIRA')
+    mock_instance = mock_jira.return_value
+    mock_instance.project_versions.return_value = ["v1", "v2"]
+
+    from app.clients.jira_client import JiraClient
+    client = JiraClient()
+    result = client.get_project_versions("PROJ1")
+
+    assert result == ["v1", "v2"]
+    mock_instance.project_versions.assert_called_once_with("PROJ1")
+
+def test_search_issues(mocker):
+    mocker.patch('app.clients.settings.get', side_effect=lambda k: "dummy")
+    mock_jira = mocker.patch('app.clients.jira_client.JIRA')
+    mock_instance = mock_jira.return_value
+    mock_instance.search_issues.return_value = ["issue1", "issue2"]
+
+    from app.clients.jira_client import JiraClient
+    client = JiraClient()
+    result = client.search_issues("project = PROJ1")
+
+    assert result == ["issue1", "issue2"]
+    mock_instance.search_issues.assert_called_once_with("project = PROJ1", maxResults=100)
