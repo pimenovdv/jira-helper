@@ -30,3 +30,10 @@ class GitLabClient(BaseClient):
             return project.events.list(per_page=20)
         except Exception as e:
             return []
+
+    def get_project_branches(self, project_id: str):
+        try:
+            project = self.client.projects.get(project_id)
+            return project.branches.list(all=True)
+        except Exception as e:
+            return []

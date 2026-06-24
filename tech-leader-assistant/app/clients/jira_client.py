@@ -16,3 +16,15 @@ class JiraClient(BaseClient):
             return {"status": "ok", "service": "Jira", "url": self.url}
         except Exception as e:
             return {"status": "error", "service": "Jira", "url": self.url, "error": str(e)}
+
+    def get_project_versions(self, project_key: str):
+        try:
+            return self.client.project_versions(project_key)
+        except Exception as e:
+            return []
+
+    def search_issues(self, jql: str):
+        try:
+            return self.client.search_issues(jql, maxResults=100)
+        except Exception as e:
+            return []
