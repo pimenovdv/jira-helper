@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DYNACONF_ENV=development
+    volumes:
+      - ./app:/app/app
+      - ./settings.toml:/app/settings.toml
+    depends_on:
+      - neo4j
+      - opensearch
+
+  neo4j:
+    image: neo4j:5.12.0
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/testpassword
+    volumes:
+      - neo4j_data:/data
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=ComplexP@ssw0rd123!
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+
+volumes:
+  neo4j_data:
+  opensearch_data:
