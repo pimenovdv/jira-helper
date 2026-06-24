@@ -41,7 +41,7 @@
 - [x] Implement genuine `JiraClient` and `ConfluenceClient`.
 - [x] Implement `Neo4jClient` for graphing relationships (Task -> Branch -> Project).
 - [x] Implement `OpenSearchClient` for document storage.
-- [ ] Set up APScheduler jobs in FastAPI lifespan to run periodic ingestion tasks.
+- [x] Set up APScheduler jobs in FastAPI lifespan to run periodic ingestion tasks.
 
 ### Phase 3: Core Logic & Processing
 - [ ] Parse GitLab webhooks or scheduled polls to build timeline event streams.

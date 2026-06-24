@@ -2,13 +2,23 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+from contextlib import asynccontextmanager
 from .clients.gitlab_client import GitLabClient
 from .clients.jira_client import JiraClient
 from .clients.confluence_client import ConfluenceClient
 from .clients.neo4j_client import Neo4jClient
 from .clients.opensearch_client import OpenSearchClient
+from .scheduler import start_scheduler, shutdown_scheduler
 
-app = FastAPI(title="Tech Leader Assistant API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start APScheduler
+    start_scheduler()
+    yield
+    # Shutdown: Stop APScheduler
+    shutdown_scheduler()
+
+app = FastAPI(title="Tech Leader Assistant API", lifespan=lifespan)
 
 # Setup static files directory
 static_dir = Path(__file__).parent / "static"
