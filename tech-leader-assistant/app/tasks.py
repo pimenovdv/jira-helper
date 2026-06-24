@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import select
 from app.clients.gitlab_client import GitLabClient
 from app.clients.jira_client import JiraClient
+from app.clients.confluence_client import ConfluenceClient
 
 from app.clients import settings
 from app.database import AsyncSessionLocal
@@ -181,7 +182,80 @@ def opensearch_ingestion_task():
     logger.info("Running OpenSearch ingestion task: chunking data and preparing for RAG.")
     return "OpenSearch ingestion task completed"
 
-def confluence_auto_link_task():
+async def confluence_auto_link_task():
     """Automatically linking Confluence pages to Git projects based on titles."""
     logger.info("Running Confluence auto-linking task: linking pages to Git projects.")
+
+    gitlab_client = GitLabClient()
+    confluence_client = ConfluenceClient()
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+
+    project_names = {}
+    for pid in tracked_projects:
+        pid = pid.strip()
+        if not pid: continue
+        project = gitlab_client.get_project(pid)
+        if project:
+            project_names[pid] = project.name
+
+    confluence_pages = []
+    for space in tracked_spaces:
+        space = space.strip()
+        if not space: continue
+        try:
+            pages = confluence_client.client.get_all_pages_from_space(space, expand="space", start=0, limit=100)
+            if isinstance(pages, list):
+                confluence_pages.extend(pages)
+            elif isinstance(pages, dict) and "results" in pages:
+                confluence_pages.extend(pages["results"])
+        except Exception as e:
+            logger.error(f"Error fetching pages for space {space}: {e}")
+
+    async with AsyncSessionLocal() as session:
+        for page in confluence_pages:
+            page_id = str(page.get("id"))
+            page_title = page.get("title", "")
+
+            auto_linked_projects = []
+            for pid, pname in project_names.items():
+                if pname.lower() in page_title.lower():
+                    auto_linked_projects.append(pid)
+
+            existing = await session.execute(
+                select(Event).where(
+                    (Event.event_type == "confluence_project_link") &
+                    (Event.data["page_id"].astext == page_id)
+                )
+            )
+            existing_event = existing.scalar_one_or_none()
+
+            if not auto_linked_projects and not existing_event:
+                continue
+
+            if not existing_event:
+                event_data = {
+                    "page_id": page_id,
+                    "page_title": page_title,
+                    "auto_linked_projects": auto_linked_projects,
+                    "manual_linked_projects": [],
+                    "manual_unlinked_projects": []
+                }
+                event = Event(
+                    event_type="confluence_project_link",
+                    timestamp=datetime.utcnow(),
+                    data=event_data
+                )
+                session.add(event)
+            else:
+                current_data = existing_event.data.copy()
+                if current_data.get("auto_linked_projects") != auto_linked_projects or current_data.get("page_title") != page_title:
+                    current_data["auto_linked_projects"] = auto_linked_projects
+                    current_data["page_title"] = page_title
+                    existing_event.data = current_data
+                    existing_event.timestamp = datetime.utcnow()
+
+        await session.commit()
+
     return "Confluence auto-linking task completed"

@@ -106,3 +106,62 @@ async def test_jira_sync_task(mocker):
     assert release_event.data["matched_gitlab_projects"] == ["1"]
 
     mock_session.commit.assert_called_once()
+
+from app.tasks import confluence_auto_link_task
+
+@pytest.mark.asyncio
+async def test_confluence_auto_link_task(mocker):
+    # Mock settings
+    def mock_settings_get(key, default=""):
+        if key == "GITLAB_TRACKED_PROJECTS":
+            return "1, 2"
+        elif key == "CONFLUENCE_TRACKED_SPACES":
+            return "SPACE1"
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    # Mock GitLabClient
+    mock_gitlab_client_cls = mocker.patch('app.tasks.GitLabClient')
+    mock_gitlab = mock_gitlab_client_cls.return_value
+
+    mock_proj_1 = MagicMock()
+    mock_proj_1.name = "AwesomeProject"
+
+    mock_proj_2 = MagicMock()
+    mock_proj_2.name = "OtherProject"
+
+    mock_gitlab.get_project.side_effect = lambda pid: mock_proj_1 if pid == "1" else mock_proj_2
+
+    # Mock ConfluenceClient
+    mock_confluence_client_cls = mocker.patch('app.tasks.ConfluenceClient')
+    mock_confluence = mock_confluence_client_cls.return_value
+
+    mock_page_1 = {"id": "123", "title": "Design Doc for AwesomeProject"}
+    mock_page_2 = {"id": "456", "title": "Random meeting notes"}
+
+    mock_confluence.client.get_all_pages_from_space.return_value = [mock_page_1, mock_page_2]
+
+    # Mock DB
+    mock_session = mocker.AsyncMock()
+    mock_session.add = mocker.MagicMock()
+    mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
+    mock_session_cls.return_value.__aenter__.return_value = mock_session
+
+    mock_result = mocker.MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    result = await confluence_auto_link_task()
+    assert result == "Confluence auto-linking task completed"
+
+    assert mock_session.add.call_count == 1
+    added_event = mock_session.add.call_args[0][0]
+
+    assert added_event.event_type == "confluence_project_link"
+    assert added_event.data["page_id"] == "123"
+    assert added_event.data["auto_linked_projects"] == ["1"]
+
+    mock_session.commit.assert_called_once()

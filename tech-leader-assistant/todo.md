@@ -46,7 +46,7 @@
 ### Phase 3: Core Logic & Processing
 - [x] Parse GitLab webhooks or scheduled polls to build timeline event streams.
 - [x] Cross-match Jira task IDs with GitLab branch names.
-- [ ] Build Confluence auto-linking logic (string matching & manual overrides).
+- [x] Build Confluence auto-linking logic (string matching & manual overrides).
 - [ ] Process Confluence docs: chunking, embedding generation (OpenAI), and OpenSearch ingestion.
 
 ### Phase 4: AI & RAG Pipeline

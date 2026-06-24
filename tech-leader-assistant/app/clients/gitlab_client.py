@@ -37,3 +37,9 @@ class GitLabClient(BaseClient):
             return project.branches.list(all=True)
         except Exception as e:
             return []
+
+    def get_project(self, project_id: str):
+        try:
+            return self.client.projects.get(project_id)
+        except Exception as e:
+            return None
