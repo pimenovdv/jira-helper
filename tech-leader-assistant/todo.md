@@ -44,7 +44,7 @@
 - [x] Set up APScheduler jobs in FastAPI lifespan to run periodic ingestion tasks.
 
 ### Phase 3: Core Logic & Processing
-- [ ] Parse GitLab webhooks or scheduled polls to build timeline event streams.
+- [x] Parse GitLab webhooks or scheduled polls to build timeline event streams.
 - [ ] Cross-match Jira task IDs with GitLab branch names.
 - [ ] Build Confluence auto-linking logic (string matching & manual overrides).
 - [ ] Process Confluence docs: chunking, embedding generation (OpenAI), and OpenSearch ingestion.
