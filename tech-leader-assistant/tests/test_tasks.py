@@ -165,3 +165,52 @@ async def test_confluence_auto_link_task(mocker):
     assert added_event.data["auto_linked_projects"] == ["1"]
 
     mock_session.commit.assert_called_once()
+
+from app.tasks import opensearch_ingestion_task
+
+def test_opensearch_ingestion_task(mocker):
+    # Mock settings
+    def mock_settings_get(key, default=""):
+        if key == "CONFLUENCE_TRACKED_SPACES":
+            return "SPACE1"
+        elif key == "OPENAI_API_KEY":
+            return "test_openai_key"
+        elif key == "OPENSEARCH_URL":
+            return "http://localhost:9200"
+        elif key == "OPENSEARCH_USER":
+            return "admin"
+        elif key == "OPENSEARCH_PASSWORD":
+            return "admin"
+        elif key == "OPENSEARCH_VERIFY_CERTS":
+            return False
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    # Mock ConfluenceClient
+    mock_confluence_client_cls = mocker.patch('app.tasks.ConfluenceClient')
+    mock_confluence = mock_confluence_client_cls.return_value
+
+    mock_page_1 = {
+        "id": "123",
+        "title": "Design Doc",
+        "body": {
+            "storage": {
+                "value": "<p>This is a test doc.</p>"
+            }
+        }
+    }
+
+    mock_confluence.client.get_all_pages_from_space.return_value = [mock_page_1]
+
+    # Mock OpenAIEmbeddings
+    mocker.patch('app.tasks.OpenAIEmbeddings')
+
+    # Mock OpenSearchVectorSearch
+    mock_os_search = mocker.patch('app.tasks.OpenSearchVectorSearch')
+
+    result = opensearch_ingestion_task()
+    assert result == "OpenSearch ingestion task completed"
+    mock_os_search.from_documents.assert_called_once()
