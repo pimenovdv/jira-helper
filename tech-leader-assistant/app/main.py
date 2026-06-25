@@ -17,6 +17,7 @@ from .clients.opensearch_client import OpenSearchClient
 from .scheduler import start_scheduler, shutdown_scheduler
 from .database import get_db, engine, Base
 from .models import Event
+from .rag import app_graph
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -138,3 +139,21 @@ async def root():
         with open(index_path, "r", encoding="utf-8") as f:
             return HTMLResponse(f.read())
     return HTMLResponse("<h1>Static files not found</h1>")
+
+class ChatRequest(BaseModel):
+    query: str
+
+@app.post("/api/chat")
+async def chat_endpoint(req: ChatRequest):
+    if not req.query:
+        raise HTTPException(status_code=400, detail="Query is required")
+
+    try:
+        result = app_graph.invoke({"question": req.query})
+        return {
+            "question": req.query,
+            "answer": result.get("answer", "No answer found"),
+            "documents": result.get("documents", [])
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
