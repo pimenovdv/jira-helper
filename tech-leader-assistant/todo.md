@@ -47,7 +47,7 @@
 - [x] Parse GitLab webhooks or scheduled polls to build timeline event streams.
 - [x] Cross-match Jira task IDs with GitLab branch names.
 - [x] Build Confluence auto-linking logic (string matching & manual overrides).
-- [ ] Process Confluence docs: chunking, embedding generation (OpenAI), and OpenSearch ingestion.
+- [x] Process Confluence docs: chunking, embedding generation (OpenAI), and OpenSearch ingestion.
 
 ### Phase 4: AI & RAG Pipeline
 - [ ] Build LangGraph workflow for RAG querying.

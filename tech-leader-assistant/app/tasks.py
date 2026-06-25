@@ -1,5 +1,10 @@
 import re
 import logging
+from bs4 import BeautifulSoup
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import OpenSearchVectorSearch
+
 from datetime import datetime
 from sqlalchemy import select
 from app.clients.gitlab_client import GitLabClient
@@ -177,11 +182,103 @@ async def jira_sync_task():
 
     return "Jira sync task completed"
 
+
 def opensearch_ingestion_task():
     """Daily extraction, chunking and loading into OpenSearch for RAG."""
     logger.info("Running OpenSearch ingestion task: chunking data and preparing for RAG.")
-    return "OpenSearch ingestion task completed"
 
+    confluence_client = ConfluenceClient()
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+
+    # Collect pages
+    confluence_pages = []
+    for space in tracked_spaces:
+        space = space.strip()
+        if not space: continue
+        try:
+            # Gentle extraction: we could limit to recent updates, but for now we limit to 100 per space
+            pages = confluence_client.client.get_all_pages_from_space(
+                space,
+                expand="body.storage",
+                start=0,
+                limit=100
+            )
+            if isinstance(pages, list):
+                confluence_pages.extend(pages)
+            elif isinstance(pages, dict) and "results" in pages:
+                confluence_pages.extend(pages["results"])
+        except Exception as e:
+            logger.error(f"Error fetching pages for space {space}: {e}")
+
+    if not confluence_pages:
+        logger.info("No pages found to ingest.")
+        return "OpenSearch ingestion task completed (no pages)"
+
+    # Clean HTML and prepare documents
+    documents = []
+    metadatas = []
+    for page in confluence_pages:
+        page_id = str(page.get("id"))
+        title = page.get("title", "")
+
+        # Extract body
+        body = ""
+        if "body" in page and "storage" in page["body"]:
+            html_content = page["body"]["storage"].get("value", "")
+            soup = BeautifulSoup(html_content, "html.parser")
+            body = soup.get_text(separator=" ", strip=True)
+
+        if not body:
+            continue
+
+        documents.append(f"Title: {title}\n\n{body}")
+
+        metadatas.append({"page_id": page_id, "title": title, "source": "confluence"})
+
+    if not documents:
+        return "OpenSearch ingestion task completed (no content)"
+
+    # Chunking
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=100,
+        length_function=len,
+    )
+
+    docs = text_splitter.create_documents(documents, metadatas=metadatas)
+
+    # Embeddings
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping embedding generation.")
+        return "OpenSearch ingestion task skipped (no OpenAI API key)"
+
+    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+
+    # OpenSearch ingestion
+    os_url = settings.get("OPENSEARCH_URL")
+    os_user = settings.get("OPENSEARCH_USER")
+    os_password = settings.get("OPENSEARCH_PASSWORD")
+    verify_certs = settings.get("OPENSEARCH_VERIFY_CERTS", default=True)
+
+    try:
+        OpenSearchVectorSearch.from_documents(
+            docs,
+            embeddings,
+            opensearch_url=os_url,
+            http_auth=(os_user, os_password),
+            use_ssl=True,
+            verify_certs=verify_certs,
+            ssl_assert_hostname=verify_certs,
+            ssl_show_warn=not verify_certs,
+            index_name="confluence-rag-index"
+        )
+        logger.info(f"Successfully ingested {len(docs)} chunks into OpenSearch.")
+    except Exception as e:
+        logger.error(f"Error during OpenSearch ingestion: {e}")
+        return "OpenSearch ingestion task failed"
+
+    return "OpenSearch ingestion task completed"
 async def confluence_auto_link_task():
     """Automatically linking Confluence pages to Git projects based on titles."""
     logger.info("Running Confluence auto-linking task: linking pages to Git projects.")
