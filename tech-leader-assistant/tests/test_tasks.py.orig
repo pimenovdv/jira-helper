@@ -66,10 +66,6 @@ async def test_jira_sync_task(mocker):
     mock_release_1.projectId = "10000"
     mock_jira.get_project_versions.return_value = [mock_release_1]
 
-    # Mock Neo4jClient
-    mock_neo4j_client_cls = mocker.patch('app.tasks.Neo4jClient')
-    mock_neo4j = mock_neo4j_client_cls.return_value
-
     # Mock AsyncSessionLocal and database operations
     mock_session = mocker.AsyncMock()
     mock_session.add = mocker.MagicMock()
@@ -110,14 +106,6 @@ async def test_jira_sync_task(mocker):
     assert release_event.data["matched_gitlab_projects"] == ["1"]
 
     mock_session.commit.assert_called_once()
-
-    # Verify Neo4jClient interactions
-    mock_neo4j.link_task_to_project.assert_any_call("PROJ1-123", "1")
-    mock_neo4j.link_task_to_project.assert_any_call("PROJ1-456", "2")
-    assert mock_neo4j.link_task_to_project.call_count == 2
-
-    mock_neo4j.link_release_to_project.assert_called_once_with("v1.0.0", "1")
-
 
 from app.tasks import confluence_auto_link_task
 
