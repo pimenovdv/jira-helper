@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tech Leader Assistant Dashboard</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; background: #f4f4f9; color: #333; }
         h1 { color: #2c3e50; }
@@ -15,10 +16,26 @@
     </style>
 </head>
 <body>
-    <h1>Tech Leader Assistant</h1>
-    <p>Monitoring statuses of integrated systems:</p>
-    <div id="dashboard" class="dashboard">
-        <p>Loading statuses...</p>
+    <div id="app">
+        <h1>Tech Leader Assistant</h1>
+        <p>Monitoring statuses of integrated systems:</p>
+
+        <div v-if="loading">
+            <p>Loading statuses...</p>
+        </div>
+        <div v-else-if="error" class="status-error">
+            <p>{{ error }}</p>
+        </div>
+        <div v-else-if="status === 'active'" class="dashboard">
+            <div v-for="client in clients" :key="client.service" class="card">
+                <h3>{{ client.service }}</h3>
+                <p>Status: <span :class="client.status === 'ok' ? 'status-ok' : 'status-error'">{{ client.status.toUpperCase() }}</span></p>
+                <p>Connection: <code>{{ client.url || client.uri }}</code></p>
+            </div>
+        </div>
+        <div v-else>
+            <p class="status-error">System is down or not properly configured.</p>
+        </div>
     </div>
 
     <script src="/static/main.js"></script>
