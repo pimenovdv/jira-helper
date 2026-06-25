@@ -50,9 +50,9 @@
 - [x] Process Confluence docs: chunking, embedding generation (OpenAI), and OpenSearch ingestion.
 
 ### Phase 4: AI & RAG Pipeline
-- [ ] Build LangGraph workflow for RAG querying.
-- [ ] Implement Langchain/OpenAI integrations to query OpenSearch indices.
-- [ ] Expose chat/query endpoint in FastAPI.
+- [x] Build LangGraph workflow for RAG querying.
+- [x] Implement Langchain/OpenAI integrations to query OpenSearch indices.
+- [x] Expose chat/query endpoint in FastAPI.
 
 ### Phase 5: UI/UX & Frontend
 - [ ] Replace basic JS with a more robust framework if needed, or build complex Vanilla JS views.

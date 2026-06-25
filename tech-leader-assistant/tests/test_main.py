@@ -48,3 +48,31 @@ async def test_override_confluence_link(mocker):
 
     mock_db.commit.assert_called_once()
     app.dependency_overrides.clear()
+
+def test_chat_endpoint(mocker):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    mock_invoke = mocker.patch("app.main.app_graph.invoke")
+    mock_invoke.return_value = {
+        "question": "Hello",
+        "answer": "Test answer",
+        "documents": ["Doc 1"]
+    }
+
+    response = client.post("/api/chat", json={"query": "Hello"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["question"] == "Hello"
+    assert data["answer"] == "Test answer"
+    assert data["documents"] == ["Doc 1"]
+
+    mock_invoke.assert_called_once_with({"question": "Hello"})
+
+def test_chat_endpoint_empty_query():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    response = client.post("/api/chat", json={"query": ""})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Query is required"
