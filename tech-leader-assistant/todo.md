@@ -55,7 +55,7 @@
 - [x] Expose chat/query endpoint in FastAPI.
 
 ### Phase 5: UI/UX & Frontend
-- [ ] Replace basic JS with a more robust framework if needed, or build complex Vanilla JS views.
+- [x] Replace basic JS with a more robust framework if needed, or build complex Vanilla JS views.
 - [ ] Implement Timeline UI (vis.js or similar).
 - [ ] Implement Sprint/Task dashboard.
 - [ ] Implement RAG Chat interface.
