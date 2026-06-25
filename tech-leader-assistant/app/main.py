@@ -1,4 +1,8 @@
 from fastapi import FastAPI, Depends
+from pydantic import BaseModel
+from fastapi import HTTPException
+from datetime import datetime
+
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -66,7 +70,68 @@ async def get_project_timeline(project_id: str, db: AsyncSession = Depends(get_d
     events = result.scalars().all()
     return {"project_id": project_id, "events": [{"id": e.id, "type": e.event_type, "timestamp": e.timestamp, "data": e.data} for e in events]}
 
+
+class ConfluenceOverrideRequest(BaseModel):
+    page_id: str
+    project_id: str
+    action: str  # 'link' or 'unlink'
+
+@app.post("/api/confluence/override")
+async def override_confluence_link(req: ConfluenceOverrideRequest, db: AsyncSession = Depends(get_db)):
+    if req.action not in ["link", "unlink"]:
+        raise HTTPException(status_code=400, detail="Action must be 'link' or 'unlink'")
+
+    result = await db.execute(
+        select(Event).where(
+            (Event.event_type == "confluence_project_link") &
+            (Event.data["page_id"].astext == req.page_id)
+        )
+    )
+    existing_event = result.scalar_one_or_none()
+
+    if not existing_event:
+        # Create a skeleton event if none exists
+        event_data = {
+            "page_id": req.page_id,
+            "page_title": "",
+            "auto_linked_projects": [],
+            "manual_linked_projects": [req.project_id] if req.action == "link" else [],
+            "manual_unlinked_projects": [req.project_id] if req.action == "unlink" else []
+        }
+        event = Event(
+            event_type="confluence_project_link",
+            timestamp=datetime.utcnow(),
+            data=event_data
+        )
+        db.add(event)
+    else:
+        current_data = existing_event.data.copy()
+
+        # Initialize lists if missing
+        if "manual_linked_projects" not in current_data:
+            current_data["manual_linked_projects"] = []
+        if "manual_unlinked_projects" not in current_data:
+            current_data["manual_unlinked_projects"] = []
+
+        if req.action == "link":
+            if req.project_id not in current_data["manual_linked_projects"]:
+                current_data["manual_linked_projects"].append(req.project_id)
+            if req.project_id in current_data["manual_unlinked_projects"]:
+                current_data["manual_unlinked_projects"].remove(req.project_id)
+        elif req.action == "unlink":
+            if req.project_id not in current_data["manual_unlinked_projects"]:
+                current_data["manual_unlinked_projects"].append(req.project_id)
+            if req.project_id in current_data["manual_linked_projects"]:
+                current_data["manual_linked_projects"].remove(req.project_id)
+
+        existing_event.data = current_data
+        existing_event.timestamp = datetime.utcnow()
+
+    await db.commit()
+    return {"status": "success"}
+
 @app.get("/")
+
 async def root():
     index_path = static_dir / "index.html"
     if index_path.exists():
