@@ -7,6 +7,11 @@ createApp({
         const status = ref(null);
         const clients = ref([]);
 
+        // Tasks Dashboard states
+        const tasks = ref([]);
+        const tasksLoading = ref(false);
+        const tasksError = ref(null);
+
         // Timeline states
         const timelineType = ref('user');
         const timelineId = ref('');
@@ -61,6 +66,27 @@ createApp({
                 });
         };
 
+        const loadTasks = () => {
+            tasksLoading.value = true;
+            tasksError.value = null;
+
+            fetch('/api/dashboard/tasks')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    tasks.value = data.tasks || [];
+                    tasksLoading.value = false;
+                })
+                .catch(err => {
+                    tasksError.value = `Error fetching tasks: ${err.message || err}`;
+                    tasksLoading.value = false;
+                });
+        };
+
         onMounted(() => {
             fetch('/api/health')
                 .then(response => {
@@ -88,6 +114,10 @@ createApp({
             timelineType,
             timelineId,
             timelineError,
+            tasks,
+            tasksLoading,
+            tasksError,
+            loadTasks,
             loadTimeline
         };
     }

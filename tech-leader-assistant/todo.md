@@ -57,5 +57,5 @@
 ### Phase 5: UI/UX & Frontend
 - [x] Replace basic JS with a more robust framework if needed, or build complex Vanilla JS views.
 - [x] Implement Timeline UI (vis.js or similar).
-- [ ] Implement Sprint/Task dashboard.
+- [x] Implement Sprint/Task dashboard.
 - [ ] Implement RAG Chat interface.

@@ -76,3 +76,44 @@ def test_chat_endpoint_empty_query():
     response = client.post("/api/chat", json={"query": ""})
     assert response.status_code == 400
     assert response.json()["detail"] == "Query is required"
+
+@pytest.mark.asyncio
+async def test_get_dashboard_tasks(mocker):
+    mock_db = mocker.AsyncMock()
+    mock_result = mocker.MagicMock()
+
+    class MockEvent:
+        def __init__(self, task_id, summary, fix_versions, matched_gitlab_projects):
+            self.event_type = "jira_task_crossmatch"
+            from datetime import datetime
+            self.timestamp = datetime.now()
+            self.data = {
+                "task_id": task_id,
+                "summary": summary,
+                "fix_versions": fix_versions,
+                "matched_gitlab_projects": matched_gitlab_projects
+            }
+
+    mock_events = [
+        MockEvent("TASK-1", "Fix a bug", ["v1.0"], ["project1"]),
+        MockEvent("TASK-2", "Add feature", [], [])
+    ]
+
+    mock_result.scalars.return_value.all.return_value = mock_events
+    mock_db.execute.return_value = mock_result
+
+    from app.main import get_db
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    response = client.get("/api/dashboard/tasks")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "tasks" in data
+    assert len(data["tasks"]) == 2
+    assert data["tasks"][0]["task_id"] == "TASK-1"
+    assert data["tasks"][0]["summary"] == "Fix a bug"
+    assert data["tasks"][0]["fix_versions"] == ["v1.0"]
+    assert data["tasks"][0]["matched_gitlab_projects"] == ["project1"]
+
+    app.dependency_overrides.clear()
