@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tech Leader Assistant Dashboard</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-timeline@7.7.2/standalone/umd/vis-timeline-graph2d.min.js"></script>
+    <link href="https://unpkg.com/vis-timeline@7.7.2/styles/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; background: #f4f4f9; color: #333; }
         h1 { color: #2c3e50; }
@@ -36,6 +38,19 @@
         <div v-else>
             <p class="status-error">System is down or not properly configured.</p>
         </div>
+
+        <hr style="margin-top: 40px; margin-bottom: 20px;">
+        <h2>Timeline</h2>
+        <div style="margin-bottom: 20px;">
+            <select v-model="timelineType" style="padding: 5px;">
+                <option value="user">User</option>
+                <option value="project">Project</option>
+            </select>
+            <input type="text" v-model="timelineId" placeholder="Enter ID" style="padding: 5px; margin-left: 10px;">
+            <button @click="loadTimeline" style="padding: 5px 10px; margin-left: 10px;">Load Timeline</button>
+        </div>
+        <div v-if="timelineError" class="status-error" style="margin-bottom: 10px;">{{ timelineError }}</div>
+        <div id="timeline" style="width: 100%; height: 400px; border: 1px solid lightgray; background: white;"></div>
     </div>
 
     <script src="/static/main.js"></script>
