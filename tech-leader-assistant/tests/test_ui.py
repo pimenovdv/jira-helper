@@ -70,3 +70,48 @@ async def test_dashboard_renders():
         assert "http://mock-gitlab" in content
 
         await browser.close()
+
+@pytest.mark.asyncio
+async def test_timeline_renders():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+
+        # intercept the health API call to return a known mock response to avoid health check errors
+        await page.route("**/api/health", lambda route: route.fulfill(
+            json={
+                "status": "active",
+                "clients": []
+            }
+        ))
+
+        # intercept the timeline API call to return mock events
+        await page.route("**/api/timeline/user/user123", lambda route: route.fulfill(
+            json={
+                "user_id": "user123",
+                "events": [
+                    {
+                        "id": 1,
+                        "type": "commit",
+                        "timestamp": "2023-10-27T10:00:00Z",
+                        "data": {"message": "Initial commit"}
+                    }
+                ]
+            }
+        ))
+
+        await page.goto("http://127.0.0.1:8001/")
+
+        # Interact with the UI
+        await page.select_option('select', 'user')
+        await page.fill('input[placeholder="Enter ID"]', 'user123')
+        await page.click('button:has-text("Load Timeline")')
+
+        # Wait for the vis-timeline item to render
+        await page.wait_for_selector(".vis-item-content")
+
+        # Verify the content
+        content = await page.text_content(".vis-item-content")
+        assert "commit" in content
+
+        await browser.close()
