@@ -161,3 +161,47 @@ async def test_dashboard_tasks_renders():
         assert "ui-project" in content
 
         await browser.close()
+
+@pytest.mark.asyncio
+async def test_chat_interface_renders_and_functions():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+
+        # intercept the health API call to avoid errors
+        await page.route("**/api/health", lambda route: route.fulfill(
+            json={
+                "status": "active",
+                "clients": []
+            }
+        ))
+
+        # intercept the chat API call
+        await page.route("**/api/chat", lambda route: route.fulfill(
+            json={
+                "question": "What is the project structure?",
+                "answer": "This is a mock assistant response.",
+                "documents": ["Mock source document 1", "Mock source document 2"]
+            }
+        ))
+
+        await page.goto("http://127.0.0.1:8001/")
+
+        # Wait for the Chat input to appear
+        await page.wait_for_selector('input[placeholder="Type your message..."]')
+
+        # Fill the chat input and click send
+        await page.fill('input[placeholder="Type your message..."]', "What is the project structure?")
+        await page.click('button:has-text("Send")')
+
+        # Wait for the mock response to appear
+        await page.wait_for_selector("text=This is a mock assistant response.")
+
+        # Verify the contents
+        content = await page.content()
+        assert "What is the project structure?" in content
+        assert "This is a mock assistant response." in content
+        assert "Mock source document 1" in content
+        assert "Mock source document 2" in content
+
+        await browser.close()

@@ -12,6 +12,61 @@ createApp({
         const tasksLoading = ref(false);
         const tasksError = ref(null);
 
+
+        // Chat states
+        const chatMessages = ref([]);
+        const chatInput = ref('');
+        const chatLoading = ref(false);
+        const chatError = ref(null);
+
+        const sendChat = () => {
+            if (!chatInput.value.trim() || chatLoading.value) return;
+
+            const query = chatInput.value.trim();
+            chatMessages.value.push({ role: 'user', content: query });
+            chatInput.value = '';
+            chatLoading.value = true;
+            chatError.value = null;
+
+            // Scroll to bottom
+            setTimeout(() => {
+                const el = document.getElementById('chat-messages');
+                if (el) el.scrollTop = el.scrollHeight;
+            }, 50);
+
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ query: query })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                chatMessages.value.push({
+                    role: 'assistant',
+                    content: data.answer,
+                    documents: data.documents
+                });
+                chatLoading.value = false;
+
+                // Scroll to bottom
+                setTimeout(() => {
+                    const el = document.getElementById('chat-messages');
+                    if (el) el.scrollTop = el.scrollHeight;
+                }, 50);
+            })
+            .catch(err => {
+                chatError.value = `Error communicating with chat API: ${err.message || err}`;
+                chatLoading.value = false;
+            });
+        };
+
         // Timeline states
         const timelineType = ref('user');
         const timelineId = ref('');
@@ -118,7 +173,12 @@ createApp({
             tasksLoading,
             tasksError,
             loadTasks,
-            loadTimeline
+            loadTimeline,
+            chatMessages,
+            chatInput,
+            chatLoading,
+            chatError,
+            sendChat
         };
     }
 }).mount('#app');
