@@ -72,6 +72,24 @@ async def get_project_timeline(project_id: str, db: AsyncSession = Depends(get_d
     return {"project_id": project_id, "events": [{"id": e.id, "type": e.event_type, "timestamp": e.timestamp, "data": e.data} for e in events]}
 
 
+@app.get("/api/dashboard/tasks")
+async def get_dashboard_tasks(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Event).where(Event.event_type == "jira_task_crossmatch").order_by(Event.timestamp.desc())
+    )
+    events = result.scalars().all()
+    tasks = []
+    for e in events:
+        data = e.data or {}
+        tasks.append({
+            "task_id": data.get("task_id", ""),
+            "summary": data.get("summary", ""),
+            "fix_versions": data.get("fix_versions", []),
+            "matched_gitlab_projects": data.get("matched_gitlab_projects", []),
+            "timestamp": e.timestamp
+        })
+    return {"tasks": tasks}
+
 class ConfluenceOverrideRequest(BaseModel):
     page_id: str
     project_id: str

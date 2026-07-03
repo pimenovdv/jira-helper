@@ -115,3 +115,49 @@ async def test_timeline_renders():
         assert "commit" in content
 
         await browser.close()
+
+@pytest.mark.asyncio
+async def test_dashboard_tasks_renders():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+
+        # intercept the health API call to avoid errors
+        await page.route("**/api/health", lambda route: route.fulfill(
+            json={
+                "status": "active",
+                "clients": []
+            }
+        ))
+
+        # intercept the tasks API call
+        await page.route("**/api/dashboard/tasks", lambda route: route.fulfill(
+            json={
+                "tasks": [
+                    {
+                        "task_id": "TEST-123",
+                        "summary": "Mock UI Task",
+                        "fix_versions": ["1.0", "1.1"],
+                        "matched_gitlab_projects": ["ui-project"],
+                        "timestamp": "2023-11-01T10:00:00Z"
+                    }
+                ]
+            }
+        ))
+
+        await page.goto("http://127.0.0.1:8001/")
+
+        # Click the Load Tasks button
+        await page.click('button:has-text("Load Tasks")')
+
+        # Wait for the task table to render the task
+        await page.wait_for_selector("text=TEST-123")
+
+        # Verify the contents
+        content = await page.content()
+        assert "TEST-123" in content
+        assert "Mock UI Task" in content
+        assert "1.0, 1.1" in content
+        assert "ui-project" in content
+
+        await browser.close()

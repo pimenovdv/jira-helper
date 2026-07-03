@@ -40,6 +40,41 @@
         </div>
 
         <hr style="margin-top: 40px; margin-bottom: 20px;">
+        <h2>Sprint / Task Dashboard</h2>
+        <div style="margin-bottom: 20px;">
+            <button @click="loadTasks" style="padding: 5px 10px;">Load Tasks</button>
+        </div>
+        <div v-if="tasksLoading">
+            <p>Loading tasks...</p>
+        </div>
+        <div v-else-if="tasksError" class="status-error" style="margin-bottom: 10px;">{{ tasksError }}</div>
+        <div v-else-if="tasks.length > 0">
+            <table style="width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <thead>
+                    <tr style="background-color: #f8f8f8; border-bottom: 2px solid #ddd;">
+                        <th style="padding: 10px; text-align: left;">Task ID</th>
+                        <th style="padding: 10px; text-align: left;">Summary</th>
+                        <th style="padding: 10px; text-align: left;">Fix Versions</th>
+                        <th style="padding: 10px; text-align: left;">Matched Projects</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="task in tasks" :key="task.task_id" style="border-bottom: 1px solid #ddd;">
+                        <td style="padding: 10px;">{{ task.task_id }}</td>
+                        <td style="padding: 10px;">{{ task.summary }}</td>
+                        <td style="padding: 10px;">{{ task.fix_versions.join(', ') }}</td>
+                        <td style="padding: 10px;">
+                            <ul style="margin: 0; padding-left: 20px;" v-if="task.matched_gitlab_projects.length > 0">
+                                <li v-for="proj in task.matched_gitlab_projects" :key="proj">{{ proj }}</li>
+                            </ul>
+                            <span v-else>None</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <hr style="margin-top: 40px; margin-bottom: 20px;">
         <h2>Timeline</h2>
         <div style="margin-bottom: 20px;">
             <select v-model="timelineType" style="padding: 5px;">
