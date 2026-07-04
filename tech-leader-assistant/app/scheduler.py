@@ -3,7 +3,8 @@ from .tasks import (
     gitlab_sync_task,
     jira_sync_task,
     opensearch_ingestion_task,
-    confluence_auto_link_task
+    confluence_auto_link_task,
+    generate_release_notes_task
 )
 import logging
 
@@ -25,6 +26,8 @@ def setup_scheduler():
 
     # 4. Confluence auto-linking (e.g., every hour)
     scheduler.add_job(confluence_auto_link_task, 'interval', hours=1, id="confluence_auto_link")
+
+    scheduler.add_job(generate_release_notes_task, 'cron', hour=2, minute=0, id="generate_release_notes")
 
     logger.info("APScheduler jobs configured.")
 
