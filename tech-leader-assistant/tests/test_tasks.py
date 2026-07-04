@@ -108,6 +108,8 @@ async def test_jira_sync_task(mocker):
     # Check release crossmatch
     release_event = next(e for e in added_events if e.event_type == "jira_release_crossmatch" and e.data["release_name"] == "v1.0.0")
     assert release_event.data["matched_gitlab_projects"] == ["1"]
+    assert "ready_for_release" in release_event.data
+    assert "tasks" in release_event.data
 
     mock_session.commit.assert_called_once()
 

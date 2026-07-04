@@ -154,9 +154,50 @@ async def jira_sync_task():
         for release in jira_releases:
             release_name = release.name
             matched_projects = []
+
+            # Tasks associated with this release
+            release_tasks = []
+            for issue in jira_issues:
+                fix_versions = [v.name for v in getattr(issue.fields, "fixVersions", [])]
+                if release_name in fix_versions:
+                    release_tasks.append(issue)
+
+            task_statuses = {}
             for pid, branches in gitlab_branches.items():
                 if any(re.search(rf"\b{re.escape(release_name)}\b", b) for b in branches):
                     matched_projects.append(pid)
+
+                # For readiness check, we check if feature branches are merged into release branch
+                release_branch = next((b for b in branches if re.search(rf"\b{re.escape(release_name)}\b", b)), None)
+                if release_branch:
+                    for task in release_tasks:
+                        task_id = task.key
+                        # Find task branches
+                        task_branch = next((b for b in branches if re.search(rf"\b{re.escape(task_id)}\b", b)), None)
+                        if task_branch:
+                            is_merged = gitlab_client.is_branch_merged(pid, task_branch, release_branch)
+                            if task_id not in task_statuses:
+                                task_statuses[task_id] = []
+                            task_statuses[task_id].append({
+                                "project_id": pid,
+                                "branch": task_branch,
+                                "merged": is_merged
+                            })
+
+            all_tasks_ready = True
+            for task in release_tasks:
+                task_id = task.key
+                # If a task has no branches matched, we might consider it not ready, or maybe we just ignore.
+                # The requirements say: check if all feature branches have been merged
+                if task_id in task_statuses:
+                    for branch_status in task_statuses[task_id]:
+                        if not branch_status["merged"]:
+                            all_tasks_ready = False
+                            break
+                else:
+                    # If task has no branch, it's not ready to merge feature branches
+                    # all_tasks_ready = False  # Let's say we only care about existing branches for now
+                    pass
 
             for pid in matched_projects:
                 neo4j_client.link_release_to_project(release_name, pid)
@@ -164,7 +205,9 @@ async def jira_sync_task():
             event_data = {
                 "release_name": release_name,
                 "matched_gitlab_projects": matched_projects,
-                "project_key": release.projectId
+                "project_key": release.projectId,
+                "ready_for_release": all_tasks_ready,
+                "tasks": [{"task_id": t.key, "summary": t.fields.summary, "statuses": task_statuses.get(t.key, [])} for t in release_tasks]
             }
 
             existing = await session.execute(
@@ -182,7 +225,9 @@ async def jira_sync_task():
                 )
                 session.add(event)
             else:
-                if existing_event.data.get("matched_gitlab_projects") != matched_projects:
+                if existing_event.data.get("matched_gitlab_projects") != matched_projects or \
+                   existing_event.data.get("ready_for_release") != all_tasks_ready or \
+                   existing_event.data.get("tasks") != event_data["tasks"]:
                     existing_event.data = event_data
                     existing_event.timestamp = datetime.utcnow()
 

@@ -112,3 +112,45 @@ def test_search_issues(mocker):
 
     assert result == ["issue1", "issue2"]
     mock_instance.search_issues.assert_called_once_with("project = PROJ1", maxResults=100)
+
+
+from app.clients.gitlab_client import GitLabClient
+
+def test_gitlab_client_is_branch_merged_true(mocker):
+    mocker.patch("app.clients.gitlab_client.settings.get", side_effect=lambda k, d="": "")
+    client = GitLabClient()
+    mock_project = mocker.MagicMock()
+    # return empty commits
+    mock_project.repository_compare.return_value = {"commits": []}
+
+    mock_gitlab_instance = mocker.MagicMock()
+    mock_gitlab_instance.projects.get.return_value = mock_project
+    client.client = mock_gitlab_instance
+
+    result = client.is_branch_merged("proj1", "feature/1", "release/1")
+    assert result is True
+    mock_project.repository_compare.assert_called_once_with(from_="release/1", to="feature/1")
+
+def test_gitlab_client_is_branch_merged_false(mocker):
+    mocker.patch("app.clients.gitlab_client.settings.get", side_effect=lambda k, d="": "")
+    client = GitLabClient()
+    mock_project = mocker.MagicMock()
+    # return some commits
+    mock_project.repository_compare.return_value = {"commits": [{"id": "abc"}]}
+
+    mock_gitlab_instance = mocker.MagicMock()
+    mock_gitlab_instance.projects.get.return_value = mock_project
+    client.client = mock_gitlab_instance
+
+    result = client.is_branch_merged("proj1", "feature/1", "release/1")
+    assert result is False
+
+def test_gitlab_client_is_branch_merged_exception(mocker):
+    mocker.patch("app.clients.gitlab_client.settings.get", side_effect=lambda k, d="": "")
+    client = GitLabClient()
+    mock_gitlab_instance = mocker.MagicMock()
+    mock_gitlab_instance.projects.get.side_effect = Exception("Not found")
+    client.client = mock_gitlab_instance
+
+    result = client.is_branch_merged("proj1", "feature/1", "release/1")
+    assert result is False
