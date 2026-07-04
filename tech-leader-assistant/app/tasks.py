@@ -2,7 +2,8 @@ import re
 import logging
 from bs4 import BeautifulSoup
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.vectorstores import OpenSearchVectorSearch
 
 from datetime import datetime
@@ -409,3 +410,120 @@ async def confluence_auto_link_task():
         await session.commit()
 
     return "Confluence auto-linking task completed"
+
+
+def generate_release_notes_task():
+    """Fetches Jira releases, gets context from OpenSearch, drafts release notes, and publishes to Confluence."""
+    logger.info("Running automated release notes generator task.")
+
+    jira_client = JiraClient()
+    confluence_client = ConfluenceClient()
+
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+
+    if not tracked_spaces or not tracked_spaces[0]:
+        logger.warning("No confluence spaces tracked for release notes.")
+        return "Release notes task completed (no spaces)"
+
+    space = tracked_spaces[0].strip()
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping release notes generation.")
+        return "Release notes task skipped (no OpenAI API key)"
+
+    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+
+    os_url = settings.get("OPENSEARCH_URL")
+    os_user = settings.get("OPENSEARCH_USER")
+    os_password = settings.get("OPENSEARCH_PASSWORD")
+    verify_certs = settings.get("OPENSEARCH_VERIFY_CERTS", default=True)
+
+    vectorstore = OpenSearchVectorSearch(
+        opensearch_url=os_url,
+        index_name="confluence-rag-index",
+        embedding_function=embeddings,
+        http_auth=(os_user, os_password),
+        use_ssl=True,
+        verify_certs=verify_certs,
+        ssl_assert_hostname=verify_certs,
+        ssl_show_warn=not verify_certs,
+    )
+    retriever = vectorstore.as_retriever()
+
+    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, openai_api_key=openai_api_key)
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj: continue
+
+        releases = jira_client.get_project_versions(j_proj)
+        if not releases:
+            continue
+
+        issues = jira_client.search_issues(f"project={j_proj}")
+
+        for release in releases:
+            release_name = release.name
+
+            # Find tasks for this release
+            release_tasks = []
+            for issue in issues:
+                fix_versions = [v.name for v in getattr(issue.fields, "fixVersions", [])]
+                if release_name in fix_versions:
+                    release_tasks.append(issue)
+
+            if not release_tasks:
+                continue
+
+            # Gather summaries and context
+            task_summaries = []
+            all_contexts = []
+            for task in release_tasks:
+                summary = getattr(task.fields, "summary", "")
+                task_summaries.append(f"- {task.key}: {summary}")
+
+                # Fetch context for this task
+                docs = retriever.invoke(summary)
+                all_contexts.extend([doc.page_content for doc in docs])
+
+            tasks_text = "\n".join(task_summaries)
+
+            # Deduplicate context somewhat
+            context_text = "\n\n".join(list(set(all_contexts))[:10]) # limit context to prevent token overflow
+
+            prompt = ChatPromptTemplate.from_template(
+                "Ты — полезный ассистент технического лидера. Твоя задача — составить черновик release notes (в формате HTML) "
+                "на основе списка задач из Jira и контекста из Confluence.\n\n"
+                "Задачи в релизе:\n{tasks}\n\n"
+                "Контекст из документации:\n{context}\n\n"
+                "Сгенерируй только HTML-код (без тегов markdown, только HTML, который можно вставить в body страницы). "
+                "Используй русский язык."
+            )
+
+            chain = prompt | llm
+
+            try:
+                response = chain.invoke({"tasks": tasks_text, "context": context_text})
+                html_content = response.content
+
+                # Clean up response if LLM added markdown tags
+                if html_content.startswith("```html"):
+                    html_content = html_content[7:]
+                if html_content.endswith("```"):
+                    html_content = html_content[:-3]
+
+                # Create page in Confluence
+                title = f"Release Notes {release_name}"
+                confluence_client.client.create_page(
+                    space=space,
+                    title=title,
+                    body=html_content,
+                    parent_id=None
+                )
+                logger.info(f"Published release notes for {release_name} to space {space}.")
+            except Exception as e:
+                logger.error(f"Failed to generate or publish release notes for {release_name}: {e}")
+
+    return "Release notes task completed"

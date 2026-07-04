@@ -228,3 +228,87 @@ def test_opensearch_ingestion_task(mocker):
     result = opensearch_ingestion_task()
     assert result == "OpenSearch ingestion task completed"
     mock_os_search.from_documents.assert_called_once()
+
+from app.tasks import generate_release_notes_task
+
+def test_generate_release_notes_task(mocker):
+    # Mock settings
+    def mock_settings_get(key, default=""):
+        if key == "JIRA_TRACKED_PROJECTS":
+            return "PROJ1"
+        elif key == "CONFLUENCE_TRACKED_SPACES":
+            return "SPACE1"
+        elif key == "OPENAI_API_KEY":
+            return "test_openai_key"
+        elif key == "OPENSEARCH_URL":
+            return "http://localhost:9200"
+        elif key == "OPENSEARCH_USER":
+            return "admin"
+        elif key == "OPENSEARCH_PASSWORD":
+            return "admin"
+        elif key == "OPENSEARCH_VERIFY_CERTS":
+            return False
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    # Mock JiraClient
+    mock_jira_client_cls = mocker.patch('app.tasks.JiraClient')
+    mock_jira = mock_jira_client_cls.return_value
+
+    mock_release = mocker.MagicMock()
+    mock_release.name = "v1.0.0"
+    mock_jira.get_project_versions.return_value = [mock_release]
+
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "PROJ1-123"
+    mock_issue.fields.summary = "Test Issue"
+    mock_version = mocker.MagicMock()
+    mock_version.name = "v1.0.0"
+    mock_issue.fields.fixVersions = [mock_version]
+    mock_jira.search_issues.return_value = [mock_issue]
+
+    # Mock ConfluenceClient
+    mock_confluence_client_cls = mocker.patch('app.tasks.ConfluenceClient')
+    mock_confluence = mock_confluence_client_cls.return_value
+    mock_confluence.client.create_page = mocker.MagicMock()
+
+    # Mock Embeddings and OpenSearch
+    mocker.patch('app.tasks.OpenAIEmbeddings')
+    mock_os_search = mocker.patch('app.tasks.OpenSearchVectorSearch')
+    mock_retriever = mocker.MagicMock()
+    mock_doc = mocker.MagicMock()
+    mock_doc.page_content = "Context for PROJ1-123."
+    mock_retriever.invoke.return_value = [mock_doc]
+    mock_os_search.return_value.as_retriever.return_value = mock_retriever
+
+    # Mock ChatOpenAI
+    mock_chat_openai_cls = mocker.patch('app.tasks.ChatOpenAI')
+    mock_chat_instance = mock_chat_openai_cls.return_value
+    # PromptTemplate | LLM chain mock logic
+    mock_chain = mocker.MagicMock()
+    mock_response = mocker.MagicMock()
+    mock_response.content = "<p>Draft release notes for v1.0.0</p>"
+    mock_chain.invoke.return_value = mock_response
+
+    # Need to mock the chain creation
+    # ChatPromptTemplate.from_template() returns a template
+    # template | llm returns a chain
+    mock_prompt_template_cls = mocker.patch('app.tasks.ChatPromptTemplate')
+    mock_prompt_template = mock_prompt_template_cls.from_template.return_value
+    mock_prompt_template.__or__.return_value = mock_chain
+
+    # Run the task
+    result = generate_release_notes_task()
+
+    assert result == "Release notes task completed"
+
+    # Verify Confluence create_page was called correctly
+    mock_confluence.client.create_page.assert_called_once_with(
+        space="SPACE1",
+        title="Release Notes v1.0.0",
+        body="<p>Draft release notes for v1.0.0</p>",
+        parent_id=None
+    )
