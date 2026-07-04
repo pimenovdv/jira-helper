@@ -66,3 +66,16 @@
 - [ ] **Stale Branch Cleanup Assistant**: Identify feature branches in GitLab that are older than X days and correspond to Jira tasks that are already marked as 'Done' or 'Closed'. Provide a 1-click option to delete these stale branches.
 - [ ] **Code Review Bottleneck Detector**: Analyze GitLab MR approvals against Jira active sprint timelines. Highlight tasks where the MR has been open for > 2 days but the Jira task is still in "In Progress" or "Code Review" to identify blockers.
 - [ ] **Test Coverage & Documentation Gap Analysis**: Link GitLab test execution results to Jira tasks. If a task is done but its branch lacks new tests or related Confluence pages (auto-linked by feature), flag it as a potential technical debt.
+
+### Phase 7: Advanced RAG & Agentic Workflows (Agentic RAG & Deep Research)
+- [ ] **Agentic RAG Tools Implementation**:
+    - [ ] Create Langchain Tool for **Jira API** to execute JQL queries and fetch task status/details.
+    - [ ] Create Langchain Tool for **GitLab API** to search repositories, commits, and Merge Requests.
+    - [ ] Create Langchain Tool for **Confluence API** (global search) using CQL.
+    - [ ] Integrate existing OpenSearch semantic chunk search as a Tool.
+- [ ] **Agentic RAG Router**: Develop a smart routing agent capable of deciding which Tool(s) to call based on the user's prompt (e.g., direct API query vs semantic chunk search).
+- [ ] **Deep Research Workflow (LangGraph)**:
+    - [ ] Implement **Agent-Planner**: Capable of breaking down complex prompts into a tree of sub-tasks.
+    - [ ] Implement **Worker Agents**: Specialized agents capable of executing tasks using the Agentic RAG tools.
+    - [ ] Implement **Agent-Reviewer**: To evaluate worker outputs and initiate retry loops if the data is insufficient or incorrect.
+    - [ ] Implement robust **State Management** in LangGraph to track execution history, sub-task status, and synthesize the final report.

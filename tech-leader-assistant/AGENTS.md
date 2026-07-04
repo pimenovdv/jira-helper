@@ -38,3 +38,9 @@ tech-leader-assistant/
 ## Testing & Validation
 - Start the server using `uvicorn app.main:app --reload`.
 - Ensure `/api/health` endpoint correctly reports the status of all dummy external clients.
+
+## Documentation & Architecture (`tech_docs/`)
+
+- Before working on AI, RAG, or Multi-Agent features, you MUST read the architecture specifications located in the `tech_docs/` directory (e.g., `tech_docs/agentic_rag_architecture.md`).
+- Ensure all implementations of Agentic RAG and Deep Research workflows strictly adhere to the patterns described in these documents.
+- Prompts for AI agents (Planners, Workers, Reviewers) must be written in Russian as defined in the memory and architecture docs.
