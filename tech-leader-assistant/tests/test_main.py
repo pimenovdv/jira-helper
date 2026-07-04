@@ -31,6 +31,7 @@ async def test_override_confluence_link(mocker):
     app.dependency_overrides[app.dependency_overrides.get("get_db", lambda: None)] = lambda: mock_db
 
     from app.main import get_db
+    from app.database import get_db
     app.dependency_overrides[get_db] = lambda: mock_db
 
     response = client.post(
@@ -103,6 +104,7 @@ async def test_get_dashboard_tasks(mocker):
     mock_db.execute.return_value = mock_result
 
     from app.main import get_db
+    from app.database import get_db
     app.dependency_overrides[get_db] = lambda: mock_db
 
     response = client.get("/api/dashboard/tasks")
@@ -115,5 +117,50 @@ async def test_get_dashboard_tasks(mocker):
     assert data["tasks"][0]["summary"] == "Fix a bug"
     assert data["tasks"][0]["fix_versions"] == ["v1.0"]
     assert data["tasks"][0]["matched_gitlab_projects"] == ["project1"]
+
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_get_dashboard_releases(mocker):
+    mock_db = mocker.AsyncMock()
+    mock_result = mocker.MagicMock()
+
+    class MockEvent:
+        def __init__(self, release_name, matched_gitlab_projects, ready_for_release, tasks):
+            self.event_type = "jira_release_crossmatch"
+            from datetime import datetime
+            self.timestamp = datetime.now()
+            self.data = {
+                "release_name": release_name,
+                "matched_gitlab_projects": matched_gitlab_projects,
+                "ready_for_release": ready_for_release,
+                "tasks": tasks
+            }
+
+    mock_events = [
+        MockEvent("v1.0", ["project1"], True, [{"task_id": "TASK-1", "summary": "Fix a bug", "statuses": []}]),
+        MockEvent("v2.0", [], False, [])
+    ]
+    mock_result.scalars().all.return_value = mock_events
+    mock_db.execute.return_value = mock_result
+
+    async def override_get_db():
+        yield mock_db
+
+    from app.database import get_db
+    app.dependency_overrides[get_db] = override_get_db
+
+    response = client.get("/api/dashboard/releases")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "releases" in data
+    assert len(data["releases"]) == 2
+    assert data["releases"][0]["release_name"] == "v1.0"
+    assert data["releases"][0]["matched_gitlab_projects"] == ["project1"]
+    assert data["releases"][0]["ready_for_release"] is True
+    assert len(data["releases"][0]["tasks"]) == 1
+    assert data["releases"][0]["tasks"][0]["task_id"] == "TASK-1"
 
     app.dependency_overrides.clear()

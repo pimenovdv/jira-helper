@@ -13,6 +13,33 @@ createApp({
         const tasksError = ref(null);
 
 
+
+        // Releases Dashboard states
+        const releases = ref([]);
+        const releasesLoading = ref(false);
+        const releasesError = ref(null);
+
+        const loadReleases = () => {
+            releasesLoading.value = true;
+            releasesError.value = null;
+
+            fetch('/api/dashboard/releases')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    releases.value = data.releases || [];
+                    releasesLoading.value = false;
+                })
+                .catch(err => {
+                    releasesError.value = `Error fetching releases: ${err.message || err}`;
+                    releasesLoading.value = false;
+                });
+        };
+
         // Chat states
         const chatMessages = ref([]);
         const chatInput = ref('');
@@ -173,6 +200,10 @@ createApp({
             tasksLoading,
             tasksError,
             loadTasks,
+            releases,
+            releasesLoading,
+            releasesError,
+            loadReleases,
             loadTimeline,
             chatMessages,
             chatInput,

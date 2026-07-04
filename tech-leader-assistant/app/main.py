@@ -90,6 +90,24 @@ async def get_dashboard_tasks(db: AsyncSession = Depends(get_db)):
         })
     return {"tasks": tasks}
 
+@app.get("/api/dashboard/releases")
+async def get_dashboard_releases(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Event).where(Event.event_type == "jira_release_crossmatch").order_by(Event.timestamp.desc())
+    )
+    events = result.scalars().all()
+    releases = []
+    for e in events:
+        data = e.data or {}
+        releases.append({
+            "release_name": data.get("release_name", ""),
+            "matched_gitlab_projects": data.get("matched_gitlab_projects", []),
+            "ready_for_release": data.get("ready_for_release", False),
+            "tasks": data.get("tasks", []),
+            "timestamp": e.timestamp
+        })
+    return {"releases": releases}
+
 class ConfluenceOverrideRequest(BaseModel):
     page_id: str
     project_id: str

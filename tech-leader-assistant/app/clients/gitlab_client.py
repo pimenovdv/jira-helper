@@ -43,3 +43,11 @@ class GitLabClient(BaseClient):
             return self.client.projects.get(project_id)
         except Exception as e:
             return None
+
+    def is_branch_merged(self, project_id: str, branch_name: str, target_branch: str) -> bool:
+        try:
+            project = self.client.projects.get(project_id)
+            cmp = project.repository_compare(from_=target_branch, to=branch_name)
+            return len(cmp.get('commits', [])) == 0
+        except Exception as e:
+            return False
