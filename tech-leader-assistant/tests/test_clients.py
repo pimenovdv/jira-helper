@@ -154,3 +154,23 @@ def test_gitlab_client_is_branch_merged_exception(mocker):
 
     result = client.is_branch_merged("proj1", "feature/1", "release/1")
     assert result is False
+
+def test_gitlab_delete_branch(mocker):
+    mocker.patch('app.clients.gitlab_client.settings.get', side_effect=lambda k, default=None: 'mock_val')
+    client = GitLabClient()
+    mock_gl_client = mocker.MagicMock()
+    client.client = mock_gl_client
+
+    mock_project = mocker.MagicMock()
+    mock_gl_client.projects.get.return_value = mock_project
+
+    # Success case
+    result = client.delete_branch("123", "feature-branch")
+    assert result is True
+    mock_gl_client.projects.get.assert_called_with("123")
+    mock_project.branches.delete.assert_called_with("feature-branch")
+
+    # Exception case
+    mock_project.branches.delete.side_effect = Exception("API Error")
+    result = client.delete_branch("123", "feature-branch")
+    assert result is False

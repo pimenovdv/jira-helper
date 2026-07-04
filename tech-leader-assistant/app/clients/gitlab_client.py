@@ -51,3 +51,11 @@ class GitLabClient(BaseClient):
             return len(cmp.get('commits', [])) == 0
         except Exception as e:
             return False
+
+    def delete_branch(self, project_id: str, branch_name: str) -> bool:
+        try:
+            project = self.client.projects.get(project_id)
+            project.branches.delete(branch_name)
+            return True
+        except Exception as e:
+            return False

@@ -120,6 +120,44 @@
 
 
         <hr style="margin-top: 40px; margin-bottom: 20px;">
+
+        <hr style="margin-top: 40px; margin-bottom: 20px;">
+        <h2>Stale Branch Cleanup Assistant</h2>
+        <div style="margin-bottom: 20px;">
+            <label for="staleDays">Days inactive: </label>
+            <input type="number" id="staleDays" v-model.number="staleDays" style="padding: 5px; width: 60px;">
+            <button @click="loadStaleBranches" style="padding: 5px 10px; margin-left: 10px;">Find Stale Branches</button>
+        </div>
+        <div v-if="staleBranchesLoading">
+            <p>Loading stale branches...</p>
+        </div>
+        <div v-else-if="staleBranchesError" class="status-error" style="margin-bottom: 10px;">{{ staleBranchesError }}</div>
+        <div v-else-if="staleBranches.length > 0">
+            <table style="width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <thead>
+                    <tr style="background-color: #f8f8f8; border-bottom: 2px solid #ddd;">
+                        <th style="padding: 10px; text-align: left;">Project ID</th>
+                        <th style="padding: 10px; text-align: left;">Branch Name</th>
+                        <th style="padding: 10px; text-align: left;">Last Commit</th>
+                        <th style="padding: 10px; text-align: left;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="branch in staleBranches" :key="branch.project_id + branch.branch_name" style="border-bottom: 1px solid #ddd;">
+                        <td style="padding: 10px;">{{ branch.project_id }}</td>
+                        <td style="padding: 10px;">{{ branch.branch_name }}</td>
+                        <td style="padding: 10px;">{{ branch.commit_date }}</td>
+                        <td style="padding: 10px;">
+                            <button @click="deleteStaleBranch(branch.project_id, branch.branch_name)" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Delete</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div v-else-if="staleBranchesSearched">
+            <p>No stale branches found!</p>
+        </div>
+
         <h2>RAG Chat</h2>
         <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             <div id="chat-messages" style="height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px; background: #f9f9f9;">

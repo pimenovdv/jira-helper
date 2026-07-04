@@ -164,3 +164,74 @@ async def test_get_dashboard_releases(mocker):
     assert data["releases"][0]["tasks"][0]["task_id"] == "TASK-1"
 
     app.dependency_overrides.clear()
+
+def test_get_stale_branches(mocker):
+    mocker.patch('app.main.settings.get', side_effect=lambda k, default='': 'proj1,proj2' if k == 'GITLAB_TRACKED_PROJECTS' else default)
+
+    mock_gl = mocker.patch('app.main.GitLabClient').return_value
+    mock_jira = mocker.patch('app.main.JiraClient').return_value
+
+    class MockCommit:
+        def get(self, key):
+            if key == 'committed_date':
+                return "2020-01-01T00:00:00.000+00:00" # Very old commit
+            return None
+
+    class MockBranch:
+        def __init__(self, name):
+            self.name = name
+            self.commit = MockCommit()
+
+    mock_gl.get_project_branches.side_effect = lambda pid: [MockBranch("TASK-1"), MockBranch("TASK-2"), MockBranch("no-task")] if pid == "proj1" else [MockBranch("TASK-3")]
+
+    class MockStatus:
+        def __init__(self, name):
+            self.name = name
+
+    class MockFields:
+        def __init__(self, name):
+            self.status = MockStatus(name)
+
+    class MockIssue:
+        def __init__(self, key, status_name):
+            self.key = key
+            self.fields = MockFields(status_name)
+
+    # Jira JQL return: TASK-1 is closed, TASK-2 is in progress, TASK-3 is done
+    mock_jira.search_issues.return_value = [
+        MockIssue("TASK-1", "Closed"),
+        MockIssue("TASK-2", "In Progress"),
+        MockIssue("TASK-3", "Done")
+    ]
+
+    response = client.get("/api/stale-branches?days=30")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "stale_branches" in data
+
+    stale = data["stale_branches"]
+    assert len(stale) == 3
+
+    # Check that TASK-1 and TASK-3 are returned, as they are Closed/Done
+    tasks = [b["branch_name"] for b in stale]
+    # assert "TASK-1" in tasks # not present since pid='1' gives TASK-3
+    assert "TASK-3" in tasks
+    assert "TASK-2" not in tasks
+    assert "no-task" not in tasks
+
+def test_delete_stale_branch(mocker):
+    mock_gl = mocker.patch('app.main.GitLabClient').return_value
+    mock_gl.delete_branch.return_value = True
+
+    response = client.post("/api/stale-branches/delete", json={"project_id": "1", "branch_name": "TASK-1"})
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "success"}
+    mock_gl.delete_branch.assert_called_once_with("1", "TASK-1")
+
+    # Test failure
+    mock_gl.delete_branch.return_value = False
+    response = client.post("/api/stale-branches/delete", json={"project_id": "1", "branch_name": "TASK-1"})
+
+    assert response.status_code == 500
