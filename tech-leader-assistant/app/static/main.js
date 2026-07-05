@@ -40,6 +40,62 @@ createApp({
                 });
         };
 
+
+        // Stale Branches states
+        const staleBranches = ref([]);
+        const staleBranchesLoading = ref(false);
+        const staleBranchesError = ref(null);
+        const staleDays = ref(30);
+        const staleBranchesSearched = ref(false);
+
+        const loadStaleBranches = () => {
+            staleBranchesLoading.value = true;
+            staleBranchesError.value = null;
+            staleBranchesSearched.value = true;
+
+            fetch(`/api/stale-branches?days=${staleDays.value}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    staleBranches.value = data.stale_branches || [];
+                    staleBranchesLoading.value = false;
+                })
+                .catch(err => {
+                    staleBranchesError.value = `Error fetching stale branches: ${err.message || err}`;
+                    staleBranchesLoading.value = false;
+                });
+        };
+
+        const deleteStaleBranch = (projectId, branchName) => {
+            if (!confirm(`Are you sure you want to delete branch ${branchName}?`)) return;
+
+            fetch('/api/stale-branches/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ project_id: String(projectId), branch_name: branchName })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Remove from list
+                staleBranches.value = staleBranches.value.filter(b => !(b.project_id === projectId && b.branch_name === branchName));
+                alert('Branch deleted successfully');
+            })
+            .catch(err => {
+                alert(`Error deleting branch: ${err.message || err}`);
+            });
+        };
+
         // Chat states
         const chatMessages = ref([]);
         const chatInput = ref('');
@@ -209,7 +265,14 @@ createApp({
             chatInput,
             chatLoading,
             chatError,
-            sendChat
+            sendChat,
+            staleBranches,
+            staleBranchesLoading,
+            staleBranchesError,
+            staleDays,
+            staleBranchesSearched,
+            loadStaleBranches,
+            deleteStaleBranch
         };
     }
 }).mount('#app');
