@@ -235,3 +235,73 @@ def test_delete_stale_branch(mocker):
     response = client.post("/api/stale-branches/delete", json={"project_id": "1", "branch_name": "TASK-1"})
 
     assert response.status_code == 500
+
+def test_get_code_review_bottlenecks(mocker):
+    import app.main
+    original = app.main.settings.get("GITLAB_TRACKED_PROJECTS")
+    app.main.settings.set("GITLAB_TRACKED_PROJECTS", "proj1")
+
+    # We must patch the client classes so that instantiating them doesn't hit the real APIs.
+    mock_gl = mocker.patch('app.main.GitLabClient').return_value
+    mock_jira = mocker.patch('app.main.JiraClient').return_value
+    mocker.patch('app.clients.jira_client.JIRA')
+    mocker.patch('app.clients.gitlab_client.gitlab.Gitlab')
+
+    class MockAuthor:
+        def get(self, key):
+            if key == 'username':
+                return 'user1'
+            return None
+
+    class MockMR:
+        def __init__(self, iid, title, source_branch, created_at, web_url):
+            self.iid = iid
+            self.title = title
+            self.source_branch = source_branch
+            self.created_at = created_at
+            self.web_url = web_url
+            self.author = MockAuthor()
+
+    mock_gl.get_project_merge_requests.return_value = [
+        MockMR(1, "Fix something", "TASK-1-fix", "2020-01-01T00:00:00.000+00:00", "http://mrs/1"),
+        MockMR(2, "TASK-2: Add feature", "feature", "2020-01-01T00:00:00.000+00:00", "http://mrs/2"),
+        MockMR(3, "Recent MR", "TASK-3-fix", "2099-01-01T00:00:00.000+00:00", "http://mrs/3"), # won't be old enough
+        MockMR(4, "No task", "no-task", "2020-01-01T00:00:00.000+00:00", "http://mrs/4")
+    ]
+
+    class MockStatus:
+        def __init__(self, name):
+            self.name = name
+
+    class MockFields:
+        def __init__(self, name, summary=""):
+            self.status = MockStatus(name)
+            self.summary = summary
+
+    class MockIssue:
+        def __init__(self, key, status_name):
+            self.key = key
+            self.fields = MockFields(status_name, "Task Summary")
+
+    # Jira JQL return
+    mock_jira.search_issues.return_value = [
+        MockIssue("TASK-1", "In Progress"), # Match
+        MockIssue("TASK-2", "Done"), # Doesn't match status
+        # TASK-3 not old enough, won't be in map
+    ]
+
+    response = client.get("/api/bottlenecks/code-review?days=2")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "bottlenecks" in data
+
+    bottlenecks = data["bottlenecks"]
+    assert len(bottlenecks) == 1
+
+    assert bottlenecks[0]["task_id"] == "TASK-1"
+    assert bottlenecks[0]["task_status"] == "in progress"
+    assert len(bottlenecks[0]["merge_requests"]) == 1
+    assert bottlenecks[0]["merge_requests"][0]["mr_iid"] == 1
+
+    app.main.settings.set("GITLAB_TRACKED_PROJECTS", original)
