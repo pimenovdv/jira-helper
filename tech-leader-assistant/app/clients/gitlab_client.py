@@ -38,6 +38,13 @@ class GitLabClient(BaseClient):
         except Exception as e:
             return []
 
+    def get_project_merge_requests(self, project_id: str, state: str = 'opened'):
+        try:
+            project = self.client.projects.get(project_id)
+            return project.mergerequests.list(state=state, all=True)
+        except Exception as e:
+            return []
+
     def get_project(self, project_id: str):
         try:
             return self.client.projects.get(project_id)
