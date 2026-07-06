@@ -204,68 +204,73 @@ class DeleteBranchRequest(BaseModel):
 
 @app.get("/api/stale-branches")
 def get_stale_branches(days: int = 30):
-    gitlab_client = GitLabClient()
-    jira_client = JiraClient()
+    try:
+        gitlab_client = GitLabClient()
+        jira_client = JiraClient()
 
-    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+        tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
 
-    stale_branches = []
-    task_branch_map = {}
+        stale_branches = []
+        task_branch_map = {}
 
-    # Calculate the cutoff date
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        # Calculate the cutoff date
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
-    for pid in tracked_projects:
-        pid = pid.strip()
-        if not pid: continue
+        for pid in tracked_projects:
+            pid = pid.strip()
+            if not pid: continue
 
-        branches = gitlab_client.get_project_branches(pid)
-        for branch in branches:
-            branch_name = branch.name
+            branches = gitlab_client.get_project_branches(pid)
+            for branch in branches:
+                branch_name = branch.name
 
-            # Extract task ID (e.g., PROJ-123)
-            match = re.search(r'([A-Z]+-\d+)', branch_name)
-            if not match:
-                continue
+                # Extract task ID (e.g., PROJ-123)
+                match = re.search(r'([A-Z]+-\d+)', branch_name)
+                if not match:
+                    continue
 
-            task_id = match.group(1)
+                task_id = match.group(1)
 
-            # Check commit date
-            commit_date_str = branch.commit.get('committed_date') if getattr(branch, 'commit', None) else None
-            if commit_date_str:
-                try:
-                    # ISO 8601 string from GitLab, parse it
-                    commit_date = datetime.fromisoformat(commit_date_str.replace("Z", "+00:00"))
-                    if commit_date > cutoff_date:
-                        continue # Not stale enough
-                except Exception:
-                    pass # Couldn't parse date, maybe keep it to be safe or ignore? Let's check Jira anyway.
+                # Check commit date
+                commit_date_str = branch.commit.get('committed_date') if getattr(branch, 'commit', None) else None
+                if commit_date_str:
+                    try:
+                        # ISO 8601 string from GitLab, parse it
+                        commit_date = datetime.fromisoformat(commit_date_str.replace("Z", "+00:00"))
+                        if commit_date.tzinfo is None:
+                            commit_date = commit_date.replace(tzinfo=timezone.utc)
+                        if commit_date > cutoff_date:
+                            continue # Not stale enough
+                    except Exception:
+                        pass # Couldn't parse date, maybe keep it to be safe or ignore? Let's check Jira anyway.
 
-            if task_id not in task_branch_map:
-                task_branch_map[task_id] = []
+                if task_id not in task_branch_map:
+                    task_branch_map[task_id] = []
 
-            task_branch_map[task_id].append({
-                "project_id": pid,
-                "branch_name": branch_name,
-                "commit_date": commit_date_str
-            })
+                task_branch_map[task_id].append({
+                    "project_id": pid,
+                    "branch_name": branch_name,
+                    "commit_date": commit_date_str
+                })
 
-    if not task_branch_map:
-        return {"stale_branches": []}
+        if not task_branch_map:
+            return {"stale_branches": []}
 
-    # Batch query Jira for these tasks
-    task_ids = list(task_branch_map.keys())
-    jql = f"key in ({','.join(task_ids)})"
+        # Batch query Jira for these tasks
+        task_ids = list(task_branch_map.keys())
+        jql = f"key in ({','.join(task_ids)})"
 
-    issues = jira_client.search_issues(jql)
+        issues = jira_client.search_issues(jql)
 
-    for issue in issues:
-        status = getattr(getattr(issue.fields, "status", None), "name", "").lower()
-        if status in ["done", "closed"]:
-            # Tasks are done, these branches are stale
-            if issue.key in task_branch_map:
-                stale_branches.extend(task_branch_map[issue.key])
+        for issue in issues:
+            status = getattr(getattr(issue.fields, "status", None), "name", "").lower()
+            if status in ["done", "closed"]:
+                # Tasks are done, these branches are stale
+                if issue.key in task_branch_map:
+                    stale_branches.extend(task_branch_map[issue.key])
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     return {"stale_branches": stale_branches}
 
 @app.post("/api/stale-branches/delete")
