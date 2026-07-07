@@ -164,3 +164,75 @@ async def test_get_dashboard_releases(mocker):
     assert data["releases"][0]["tasks"][0]["task_id"] == "TASK-1"
 
     app.dependency_overrides.clear()
+
+
+def test_get_stale_branches(mocker):
+    def mock_settings_get(key, default=""):
+        if key == "GITLAB_TRACKED_PROJECTS":
+            return "1"
+        if key == "JIRA_TRACKED_PROJECTS":
+            return "proj1"
+        if key == "OPENAI_API_KEY":
+            return ""
+        return default
+
+    # mock settings
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+
+    mocker.patch("app.clients.settings.get", side_effect=mock_settings_get)
+
+    mock_jira_client_cls = mocker.patch("app.main.JiraClient")
+    mock_jira = mock_jira_client_cls.return_value
+
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "TASK-123"
+    mock_jira.search_issues.return_value = [mock_issue]
+
+    mock_gitlab_client_cls = mocker.patch("app.main.GitLabClient")
+    mock_gitlab = mock_gitlab_client_cls.return_value
+
+    from datetime import datetime, timezone, timedelta
+    old_date = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()
+
+    mock_branch_stale = mocker.MagicMock()
+    mock_branch_stale.name = "feature/TASK-123"
+    mock_branch_stale.attributes = {"commit": {"committed_date": old_date}}
+
+    mock_branch_new = mocker.MagicMock()
+    mock_branch_new.name = "feature/TASK-123-new"
+    new_date = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+    mock_branch_new.attributes = {"commit": {"committed_date": new_date}}
+
+    mock_branch_unrelated = mocker.MagicMock()
+    mock_branch_unrelated.name = "feature/TASK-999"
+    mock_branch_unrelated.attributes = {"commit": {"committed_date": old_date}}
+
+    mock_gitlab.get_project_branches.return_value = [mock_branch_stale, mock_branch_new, mock_branch_unrelated]
+
+    response = client.get("/api/stale-branches")
+    assert response.status_code == 200
+    data = response.json()
+    assert "stale_branches" in data
+    assert len(data["stale_branches"]) == 1
+    assert data["stale_branches"][0]["branch_name"] == "feature/TASK-123"
+    assert data["stale_branches"][0]["issue_key"] == "TASK-123"
+
+def test_delete_stale_branch(mocker):
+    mock_gitlab_client_cls = mocker.patch("app.main.GitLabClient")
+    mock_gitlab = mock_gitlab_client_cls.return_value
+    mock_gitlab.delete_branch.return_value = True
+
+    response = client.post("/api/stale-branches/delete", json={"project_id": "1", "branch_name": "feature/TASK-123"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    mock_gitlab.delete_branch.assert_called_once_with("1", "feature/TASK-123")
+
+def test_delete_stale_branch_failure(mocker):
+    mock_gitlab_client_cls = mocker.patch("app.main.GitLabClient")
+    mock_gitlab = mock_gitlab_client_cls.return_value
+    mock_gitlab.delete_branch.return_value = False
+
+    response = client.post("/api/stale-branches/delete", json={"project_id": "1", "branch_name": "feature/TASK-123"})
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Failed to delete branch"
