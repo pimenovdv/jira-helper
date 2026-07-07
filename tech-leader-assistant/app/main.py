@@ -281,3 +281,78 @@ def delete_stale_branch(req: DeleteBranchRequest):
         return {"status": "success"}
     else:
         raise HTTPException(status_code=500, detail="Failed to delete branch")
+
+@app.get("/api/bottlenecks/code-review")
+def get_code_review_bottlenecks(days: int = 2):
+    gitlab_client = GitLabClient()
+    jira_client = JiraClient()
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+    task_mr_map = {}
+
+    for pid in tracked_projects:
+        pid = pid.strip()
+        if not pid: continue
+
+        mrs = gitlab_client.get_project_merge_requests(pid, state="opened")
+        for mr in mrs:
+            created_at_str = mr.created_at
+            if created_at_str:
+                try:
+                    created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                    if created_at > cutoff_date:
+                        continue # Not old enough to be a bottleneck
+                except Exception:
+                    pass
+
+            # Extract task ID from branch name or MR title
+            task_id = None
+            match_branch = re.search(r'([A-Z]+-\d+)', mr.source_branch)
+            if match_branch:
+                task_id = match_branch.group(1)
+            else:
+                match_title = re.search(r'([A-Z]+-\d+)', mr.title)
+                if match_title:
+                    task_id = match_title.group(1)
+
+            if not task_id:
+                continue
+
+            if task_id not in task_mr_map:
+                task_mr_map[task_id] = []
+
+            task_mr_map[task_id].append({
+                "project_id": pid,
+                "mr_iid": mr.iid,
+                "mr_title": mr.title,
+                "mr_web_url": mr.web_url,
+                "created_at": created_at_str,
+                "author": mr.author.get('username') if getattr(mr, 'author', None) else 'unknown'
+            })
+
+    bottlenecks = []
+
+    if not task_mr_map:
+        return {"bottlenecks": []}
+
+    task_ids = list(task_mr_map.keys())
+    jql = f"key in ({','.join(task_ids)})"
+
+    issues = jira_client.search_issues(jql)
+
+    for issue in issues:
+        status = getattr(getattr(issue.fields, "status", None), "name", "").lower()
+        if status in ["in progress", "code review", "review"]:
+            # Task is in progress/review, and MR is old, so it's a bottleneck
+            if issue.key in task_mr_map:
+                bottlenecks.append({
+                    "task_id": issue.key,
+                    "task_summary": getattr(issue.fields, "summary", ""),
+                    "task_status": status,
+                    "merge_requests": task_mr_map[issue.key]
+                })
+
+    return {"bottlenecks": bottlenecks}

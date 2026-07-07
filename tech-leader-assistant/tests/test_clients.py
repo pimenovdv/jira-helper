@@ -87,6 +87,22 @@ def test_get_project_branches(mocker):
     mock_instance.projects.get.assert_called_once_with("1")
     mock_project.branches.list.assert_called_once_with(all=True)
 
+def test_get_project_merge_requests(mocker):
+    mocker.patch('app.clients.settings.get', side_effect=lambda k: "dummy")
+    mock_gitlab = mocker.patch('app.clients.gitlab_client.gitlab.Gitlab')
+    mock_instance = mock_gitlab.return_value
+    mock_project = mocker.MagicMock()
+    mock_instance.projects.get.return_value = mock_project
+    mock_project.mergerequests.list.return_value = ["mr1", "mr2"]
+
+    from app.clients.gitlab_client import GitLabClient
+    client = GitLabClient()
+    result = client.get_project_merge_requests("1", state="opened")
+
+    assert result == ["mr1", "mr2"]
+    mock_instance.projects.get.assert_called_once_with("1")
+    mock_project.mergerequests.list.assert_called_once_with(state="opened", all=True)
+
 def test_get_project_versions(mocker):
     mocker.patch('app.clients.settings.get', side_effect=lambda k: "dummy")
     mock_jira = mocker.patch('app.clients.jira_client.JIRA')
