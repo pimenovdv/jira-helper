@@ -66,3 +66,16 @@ class GitLabClient(BaseClient):
             return True
         except Exception as e:
             return False
+
+    def search_projects(self, query: str):
+        try:
+            return self.client.projects.list(search=query, all=True)
+        except Exception as e:
+            return []
+
+    def get_project_commits(self, project_id: str, ref_name: str = "main"):
+        try:
+            project = self.client.projects.get(project_id)
+            return project.commits.list(ref_name=ref_name, all=True)
+        except Exception as e:
+            return []

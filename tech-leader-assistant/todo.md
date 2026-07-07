@@ -67,11 +67,11 @@
 - [ ] **Automated Code Review Assistant**: Integrate an LLM agent to automatically review new MRs in GitLab against organizational coding guidelines stored in Confluence, providing early feedback before human review.
 
 ### Phase 7: Advanced RAG & Agentic Workflows (Agentic RAG & Deep Research)
-- [ ] **Agentic RAG Tools Implementation**:
-    - [ ] Create Langchain Tool for **Jira API** to execute JQL queries and fetch task status/details.
-    - [ ] Create Langchain Tool for **GitLab API** to search repositories, commits, and Merge Requests.
-    - [ ] Create Langchain Tool for **Confluence API** (global search) using CQL.
-    - [ ] Integrate existing OpenSearch semantic chunk search as a Tool.
+- [x] **Agentic RAG Tools Implementation**:
+    - [x] Create Langchain Tool for **Jira API** to execute JQL queries and fetch task status/details.
+    - [x] Create Langchain Tool for **GitLab API** to search repositories, commits, and Merge Requests.
+    - [x] Create Langchain Tool for **Confluence API** (global search) using CQL.
+    - [x] Integrate existing OpenSearch semantic chunk search as a Tool.
 - [ ] **Agentic RAG Router**: Develop a smart routing agent capable of deciding which Tool(s) to call based on the user's prompt (e.g., direct API query vs semantic chunk search).
 - [ ] **Deep Research Workflow (LangGraph)**:
     - [ ] Implement **Agent-Planner**: Capable of breaking down complex prompts into a tree of sub-tasks.
