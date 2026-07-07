@@ -95,7 +95,7 @@ async def jira_sync_task():
         pid = pid.strip()
         if not pid: continue
         branches = gitlab_client.get_project_branches(pid)
-        gitlab_branches[pid] = [b.name for b in branches]
+        gitlab_branches[pid] = [b.name for b in branches if hasattr(b, "name")]
 
     jira_issues = []
     jira_releases = []
@@ -174,7 +174,7 @@ async def jira_sync_task():
                     for task in release_tasks:
                         task_id = task.key
                         # Find task branches
-                        task_branch = next((b for b in branches if re.search(rf"\b{re.escape(task_id)}\b", b)), None)
+                        task_branch = next((b for b in branches if re.search(rf"{re.escape(task_id)}", b)), None)
                         if task_branch:
                             is_merged = gitlab_client.is_branch_merged(pid, task_branch, release_branch)
                             if task_id not in task_statuses:
@@ -197,7 +197,7 @@ async def jira_sync_task():
                             break
                 else:
                     # If task has no branch, it's not ready to merge feature branches
-                    # all_tasks_ready = False  # Let's say we only care about existing branches for now
+                    all_tasks_ready = False
                     pass
 
             for pid in matched_projects:
