@@ -1,4 +1,8 @@
 from fastapi import FastAPI, Depends
+import re
+from datetime import datetime, timezone, timedelta
+from .clients import settings
+
 from pydantic import BaseModel
 from fastapi import HTTPException
 from datetime import datetime
@@ -270,3 +274,162 @@ async def chat_endpoint(req: ChatRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+class DeleteBranchRequest(BaseModel):
+    project_id: str
+    branch_name: str
+
+@app.get("/api/stale-branches")
+def get_stale_branches(days: int = 30):
+    try:
+        gitlab_client = GitLabClient()
+        jira_client = JiraClient()
+
+        tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+
+        stale_branches = []
+        task_branch_map = {}
+
+        # Calculate the cutoff date
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+        for pid in tracked_projects:
+            pid = pid.strip()
+            if not pid: continue
+
+            branches = gitlab_client.get_project_branches(pid)
+            for branch in branches:
+                branch_name = branch.name
+
+                # Extract task ID (e.g., PROJ-123)
+                match = re.search(r'([A-Z]+-\d+)', branch_name)
+                if not match:
+                    continue
+
+                task_id = match.group(1)
+
+                # Check commit date
+                commit_date_str = branch.commit.get('committed_date') if getattr(branch, 'commit', None) else None
+                if commit_date_str:
+                    try:
+                        # ISO 8601 string from GitLab, parse it
+                        commit_date = datetime.fromisoformat(commit_date_str.replace("Z", "+00:00"))
+                        if commit_date.tzinfo is None:
+                            commit_date = commit_date.replace(tzinfo=timezone.utc)
+                        if commit_date > cutoff_date:
+                            continue # Not stale enough
+                    except Exception:
+                        pass # Couldn't parse date, maybe keep it to be safe or ignore? Let's check Jira anyway.
+
+                if task_id not in task_branch_map:
+                    task_branch_map[task_id] = []
+
+                task_branch_map[task_id].append({
+                    "project_id": pid,
+                    "branch_name": branch_name,
+                    "commit_date": commit_date_str
+                })
+
+        if not task_branch_map:
+            return {"stale_branches": []}
+
+        # Batch query Jira for these tasks
+        task_ids = list(task_branch_map.keys())
+        jql = f"key in ({','.join(task_ids)})"
+
+        issues = jira_client.search_issues(jql)
+
+        for issue in issues:
+            status = getattr(getattr(issue.fields, "status", None), "name", "").lower()
+            if status in ["done", "closed"]:
+                # Tasks are done, these branches are stale
+                if issue.key in task_branch_map:
+                    stale_branches.extend(task_branch_map[issue.key])
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"stale_branches": stale_branches}
+
+@app.post("/api/stale-branches/delete")
+def delete_stale_branch(req: DeleteBranchRequest):
+    gitlab_client = GitLabClient()
+    success = gitlab_client.delete_branch(req.project_id, req.branch_name)
+    if success:
+        return {"status": "success"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete branch")
+
+@app.get("/api/bottlenecks/code-review")
+def get_code_review_bottlenecks(days: int = 2):
+    gitlab_client = GitLabClient()
+    jira_client = JiraClient()
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+    task_mr_map = {}
+
+    for pid in tracked_projects:
+        pid = pid.strip()
+        if not pid: continue
+
+        mrs = gitlab_client.get_project_merge_requests(pid, state="opened")
+        for mr in mrs:
+            created_at_str = mr.created_at
+            if created_at_str:
+                try:
+                    created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                    if created_at > cutoff_date:
+                        continue # Not old enough to be a bottleneck
+                except Exception:
+                    pass
+
+            # Extract task ID from branch name or MR title
+            task_id = None
+            match_branch = re.search(r'([A-Z]+-\d+)', mr.source_branch)
+            if match_branch:
+                task_id = match_branch.group(1)
+            else:
+                match_title = re.search(r'([A-Z]+-\d+)', mr.title)
+                if match_title:
+                    task_id = match_title.group(1)
+
+            if not task_id:
+                continue
+
+            if task_id not in task_mr_map:
+                task_mr_map[task_id] = []
+
+            task_mr_map[task_id].append({
+                "project_id": pid,
+                "mr_iid": mr.iid,
+                "mr_title": mr.title,
+                "mr_web_url": mr.web_url,
+                "created_at": created_at_str,
+                "author": mr.author.get('username') if getattr(mr, 'author', None) else 'unknown'
+            })
+
+    bottlenecks = []
+
+    if not task_mr_map:
+        return {"bottlenecks": []}
+
+    task_ids = list(task_mr_map.keys())
+    jql = f"key in ({','.join(task_ids)})"
+
+    issues = jira_client.search_issues(jql)
+
+    for issue in issues:
+        status = getattr(getattr(issue.fields, "status", None), "name", "").lower()
+        if status in ["in progress", "code review", "review"]:
+            # Task is in progress/review, and MR is old, so it's a bottleneck
+            if issue.key in task_mr_map:
+                bottlenecks.append({
+                    "task_id": issue.key,
+                    "task_summary": getattr(issue.fields, "summary", ""),
+                    "task_status": status,
+                    "merge_requests": task_mr_map[issue.key]
+                })
+
+    return {"bottlenecks": bottlenecks}

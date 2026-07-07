@@ -312,3 +312,226 @@ def test_generate_release_notes_task(mocker):
         body="<p>Draft release notes for v1.0.0</p>",
         parent_id=None
     )
+
+@pytest.mark.asyncio
+async def test_jira_sync_task_ready_for_release(mocker):
+    mocker.patch('app.tasks.settings.get', side_effect=lambda k, default='': 'PROJ1' if k == 'JIRA_TRACKED_PROJECTS' else ('1' if k == 'GITLAB_TRACKED_PROJECTS' else default))
+
+    mock_jira = mocker.patch('app.tasks.JiraClient').return_value
+    mock_gl = mocker.patch('app.tasks.GitLabClient').return_value
+    mocker.patch('app.tasks.Neo4jClient')
+
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "PROJ1-123"
+    mock_issue.fields.summary = "A Feature"
+    mock_version = mocker.MagicMock()
+    mock_version.name = "v1.0.0"
+    mock_issue.fields.fixVersions = [mock_version]
+    mock_issue.fields.status.name = "Closed" # Required for ready release
+
+    mock_jira.search_issues.return_value = [mock_issue]
+
+    mock_release = mocker.MagicMock()
+    mock_release.name = "v1.0.0"
+    mock_jira.get_project_versions.return_value = [mock_release]
+
+    mock_branch = mocker.MagicMock()
+    mock_branch.commit = {}
+
+    mock_branch.name = "PROJ1-123"
+    mock_release_branch = mocker.MagicMock()
+    mock_release_branch.name = "v1.0.0"
+
+    mock_gl.get_project_branches.return_value = [mock_branch, mock_release_branch]
+    # Branch is merged
+    mock_gl.is_branch_merged.return_value = True
+
+    mock_session = mocker.AsyncMock()
+    mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
+    mock_session_cls.return_value.__aenter__.return_value = mock_session
+
+    mock_result = mocker.MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    from app.tasks import jira_sync_task
+    result = await jira_sync_task()
+
+    assert result == "Jira sync task completed"
+    # Find release event
+    added_events = [call.args[0] for call in mock_session.add.call_args_list]
+    release_event = next(e for e in added_events if e.event_type == "jira_release_crossmatch" and e.data["release_name"] == "v1.0.0")
+    assert release_event.data["ready_for_release"] is True
+
+@pytest.mark.asyncio
+async def test_jira_sync_task_unmerged_feature(mocker):
+    mocker.patch('app.tasks.settings.get', side_effect=lambda k, default='': 'PROJ1' if k == 'JIRA_TRACKED_PROJECTS' else ('1' if k == 'GITLAB_TRACKED_PROJECTS' else default))
+
+    mock_jira = mocker.patch('app.tasks.JiraClient').return_value
+    mock_gl = mocker.patch('app.tasks.GitLabClient').return_value
+    mocker.patch('app.tasks.Neo4jClient')
+
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "PROJ1-123"
+    mock_issue.fields.summary = "A Feature"
+    mock_version = mocker.MagicMock()
+    mock_version.name = "v1.0.0"
+    mock_issue.fields.fixVersions = [mock_version]
+    mock_issue.fields.status.name = "Closed" # Required for ready release, but branch unmerged
+
+    mock_jira.search_issues.return_value = [mock_issue]
+
+    mock_release = mocker.MagicMock()
+    mock_release.name = "v1.0.0"
+    mock_jira.get_project_versions.return_value = [mock_release]
+
+    mock_branch = mocker.MagicMock()
+    mock_branch.commit = {}
+
+    mock_branch.name = "PROJ1-123"
+    mock_release_branch = mocker.MagicMock()
+    mock_release_branch.name = "v1.0.0"
+
+    mock_gl.get_project_branches.return_value = [mock_branch, mock_release_branch]
+    # Branch is unmerged
+    mock_gl.is_branch_merged.return_value = False
+
+    mock_session = mocker.AsyncMock()
+    mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
+    mock_session_cls.return_value.__aenter__.return_value = mock_session
+
+    mock_result = mocker.MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_result
+
+    from app.tasks import jira_sync_task
+    result = await jira_sync_task()
+
+    assert result == "Jira sync task completed"
+    # Find release event
+    added_events = [call.args[0] for call in mock_session.add.call_args_list]
+    release_event = next(e for e in added_events if e.event_type == "jira_release_crossmatch" and e.data["release_name"] == "v1.0.0")
+    assert release_event.data["ready_for_release"] is False
+
+@pytest.mark.asyncio
+async def test_confluence_auto_link_task_no_tracked_spaces(mocker):
+    mocker.patch('app.tasks.JiraClient')
+    mocker.patch('app.tasks.Neo4jClient')
+    mocker.patch('app.tasks.settings.get', return_value='')
+    from app.tasks import confluence_auto_link_task
+    result = await confluence_auto_link_task()
+    assert result == "Confluence auto-linking task completed"
+
+@pytest.mark.asyncio
+async def test_jira_sync_task_no_tracked_projects(mocker):
+    mocker.patch('app.tasks.JiraClient')
+    mocker.patch('app.tasks.Neo4jClient')
+    mocker.patch('app.tasks.settings.get', return_value='')
+    from app.tasks import jira_sync_task
+    result = await jira_sync_task()
+    assert result == "Jira sync task completed"
+
+@pytest.mark.asyncio
+async def test_gitlab_sync_task_no_tracked_projects(mocker):
+    mocker.patch('app.tasks.JiraClient')
+    mocker.patch('app.tasks.Neo4jClient')
+    mocker.patch('app.tasks.settings.get', return_value='')
+    from app.tasks import gitlab_sync_task
+    result = await gitlab_sync_task()
+    assert result == "GitLab sync task completed"
+
+@pytest.mark.asyncio
+async def test_gitlab_sync_task_existing_project_event(mocker):
+    mocker.patch('app.tasks.settings.get', side_effect=lambda k, default='': '1' if k == 'GITLAB_TRACKED_PROJECTS' else default)
+    mock_gl = mocker.patch('app.tasks.GitLabClient').return_value
+    mocker.patch('app.tasks.JiraClient')
+    mocker.patch('app.tasks.Neo4jClient')
+
+    mock_event = mocker.MagicMock()
+    mock_event.attributes = {"id": "123"}
+
+    mock_gl.get_project_events.return_value = [mock_event]
+
+    mock_session = mocker.AsyncMock()
+    mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
+    mock_session_cls.return_value.__aenter__.return_value = mock_session
+
+    mock_result = mocker.MagicMock()
+    mock_existing_event = mocker.MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_existing_event
+    mock_session.execute.return_value = mock_result
+
+    from app.tasks import gitlab_sync_task
+    result = await gitlab_sync_task()
+
+    assert result == "GitLab sync task completed"
+    mock_session.add.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_gitlab_sync_task_existing_user_event(mocker):
+    mocker.patch('app.tasks.settings.get', side_effect=lambda k, default='': '1' if k == 'GITLAB_TRACKED_USERS' else default)
+    mock_gl = mocker.patch('app.tasks.GitLabClient').return_value
+    mocker.patch('app.tasks.JiraClient')
+    mocker.patch('app.tasks.Neo4jClient')
+
+    mock_event = mocker.MagicMock()
+    mock_event.attributes = {"id": "123"}
+
+    mock_gl.get_user_events.return_value = [mock_event]
+    mock_gl.get_project_events.return_value = []
+
+    mock_session = mocker.AsyncMock()
+    mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
+    mock_session_cls.return_value.__aenter__.return_value = mock_session
+
+    mock_result = mocker.MagicMock()
+    mock_existing_event = mocker.MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_existing_event
+    mock_session.execute.return_value = mock_result
+
+    from app.tasks import gitlab_sync_task
+    result = await gitlab_sync_task()
+
+    assert result == "GitLab sync task completed"
+    mock_session.add.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_jira_sync_task_existing_release_event_no_change(mocker):
+    mocker.patch('app.tasks.settings.get', side_effect=lambda k, default='': 'PROJ1' if k == 'JIRA_TRACKED_PROJECTS' else ('1' if k == 'GITLAB_TRACKED_PROJECTS' else default))
+
+    mock_jira = mocker.patch('app.tasks.JiraClient').return_value
+    mock_gl = mocker.patch('app.tasks.GitLabClient').return_value
+    mocker.patch('app.tasks.Neo4jClient')
+
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "PROJ1-123"
+    mock_issue.fields.summary = "Same Feature"
+    mock_issue.fields.fixVersions = []
+
+    mock_jira.search_issues.return_value = []
+
+    mock_release = mocker.MagicMock()
+    mock_release.name = "v1.0.0"
+    mock_jira.get_project_versions.return_value = [mock_release]
+
+    mock_gl.get_project_branches.return_value = []
+
+    mock_session = mocker.AsyncMock()
+    mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
+    mock_session_cls.return_value.__aenter__.return_value = mock_session
+
+    mock_result = mocker.MagicMock()
+    mock_existing_event = mocker.MagicMock()
+    mock_existing_event.data = {
+        "matched_gitlab_projects": [],
+        "ready_for_release": True,
+        "tasks": []
+    }
+    mock_result.scalar_one_or_none.return_value = mock_existing_event
+    mock_session.execute.return_value = mock_result
+
+    from app.tasks import jira_sync_task
+    result = await jira_sync_task()
+
+    assert result == "Jira sync task completed"
+    mock_session.commit.assert_called_once()

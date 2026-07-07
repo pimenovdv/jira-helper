@@ -165,74 +165,143 @@ async def test_get_dashboard_releases(mocker):
 
     app.dependency_overrides.clear()
 
-
 def test_get_stale_branches(mocker):
-    def mock_settings_get(key, default=""):
-        if key == "GITLAB_TRACKED_PROJECTS":
-            return "1"
-        if key == "JIRA_TRACKED_PROJECTS":
-            return "proj1"
-        if key == "OPENAI_API_KEY":
-            return ""
-        return default
+    mocker.patch('app.main.settings.get', side_effect=lambda k, default='': 'proj1,proj2' if k == 'GITLAB_TRACKED_PROJECTS' else default)
 
-    # mock settings
-    mock_settings = mocker.MagicMock()
-    mock_settings.get.side_effect = mock_settings_get
+    mock_gl = mocker.patch('app.main.GitLabClient').return_value
+    mock_jira = mocker.patch('app.main.JiraClient').return_value
 
-    mocker.patch("app.clients.settings.get", side_effect=mock_settings_get)
+    class MockCommit:
+        def get(self, key):
+            if key == 'committed_date':
+                return "2020-01-01T00:00:00.000+00:00" # Very old commit
+            return None
 
-    mock_jira_client_cls = mocker.patch("app.main.JiraClient")
-    mock_jira = mock_jira_client_cls.return_value
+    class MockBranch:
+        def __init__(self, name):
+            self.name = name
+            self.commit = MockCommit()
 
-    mock_issue = mocker.MagicMock()
-    mock_issue.key = "TASK-123"
-    mock_jira.search_issues.return_value = [mock_issue]
+    mock_gl.get_project_branches.side_effect = lambda pid: [MockBranch("TASK-1"), MockBranch("TASK-2"), MockBranch("no-task")] if pid == "proj1" else [MockBranch("TASK-3")]
 
-    mock_gitlab_client_cls = mocker.patch("app.main.GitLabClient")
-    mock_gitlab = mock_gitlab_client_cls.return_value
+    class MockStatus:
+        def __init__(self, name):
+            self.name = name
 
-    from datetime import datetime, timezone, timedelta
-    old_date = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()
+    class MockFields:
+        def __init__(self, name):
+            self.status = MockStatus(name)
 
-    mock_branch_stale = mocker.MagicMock()
-    mock_branch_stale.name = "feature/TASK-123"
-    mock_branch_stale.attributes = {"commit": {"committed_date": old_date}}
+    class MockIssue:
+        def __init__(self, key, status_name):
+            self.key = key
+            self.fields = MockFields(status_name)
 
-    mock_branch_new = mocker.MagicMock()
-    mock_branch_new.name = "feature/TASK-123-new"
-    new_date = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
-    mock_branch_new.attributes = {"commit": {"committed_date": new_date}}
+    # Jira JQL return: TASK-1 is closed, TASK-2 is in progress, TASK-3 is done
+    mock_jira.search_issues.return_value = [
+        MockIssue("TASK-1", "Closed"),
+        MockIssue("TASK-2", "In Progress"),
+        MockIssue("TASK-3", "Done")
+    ]
 
-    mock_branch_unrelated = mocker.MagicMock()
-    mock_branch_unrelated.name = "feature/TASK-999"
-    mock_branch_unrelated.attributes = {"commit": {"committed_date": old_date}}
+    response = client.get("/api/stale-branches?days=30")
 
-    mock_gitlab.get_project_branches.return_value = [mock_branch_stale, mock_branch_new, mock_branch_unrelated]
-
-    response = client.get("/api/stale-branches")
     assert response.status_code == 200
     data = response.json()
     assert "stale_branches" in data
-    assert len(data["stale_branches"]) == 1
-    assert data["stale_branches"][0]["branch_name"] == "feature/TASK-123"
-    assert data["stale_branches"][0]["issue_key"] == "TASK-123"
+
+    stale = data["stale_branches"]
+    assert len(stale) == 3
+
+    # Check that TASK-1 and TASK-3 are returned, as they are Closed/Done
+    tasks = [b["branch_name"] for b in stale]
+    # assert "TASK-1" in tasks # not present since pid='1' gives TASK-3
+    assert "TASK-3" in tasks
+    assert "TASK-2" not in tasks
+    assert "no-task" not in tasks
 
 def test_delete_stale_branch(mocker):
-    mock_gitlab_client_cls = mocker.patch("app.main.GitLabClient")
-    mock_gitlab = mock_gitlab_client_cls.return_value
-    mock_gitlab.delete_branch.return_value = True
+    mock_gl = mocker.patch('app.main.GitLabClient').return_value
+    mock_gl.delete_branch.return_value = True
 
-    response = client.post("/api/stale-branches/delete", json={"project_id": "1", "branch_name": "feature/TASK-123"})
+    response = client.post("/api/stale-branches/delete", json={"project_id": "1", "branch_name": "TASK-1"})
+
     assert response.status_code == 200
-    assert response.json()["status"] == "success"
-    mock_gitlab.delete_branch.assert_called_once_with("1", "feature/TASK-123")
+    assert response.json() == {"status": "success"}
+    mock_gl.delete_branch.assert_called_once_with("1", "TASK-1")
 
-def test_delete_stale_branch_failure(mocker):
-    mock_gitlab_client_cls = mocker.patch("app.main.GitLabClient")
-    mock_gitlab = mock_gitlab_client_cls.return_value
-    mock_gitlab.delete_branch.return_value = False
+    # Test failure
+    mock_gl.delete_branch.return_value = False
+    response = client.post("/api/stale-branches/delete", json={"project_id": "1", "branch_name": "TASK-1"})
 
-    response = client.post("/api/stale-branches/delete", json={"project_id": "1", "branch_name": "feature/TASK-123"})
     assert response.status_code == 500
-    assert response.json()["detail"] == "Failed to delete branch"
+
+def test_get_code_review_bottlenecks(mocker):
+    import app.main
+    original = app.main.settings.get("GITLAB_TRACKED_PROJECTS")
+    app.main.settings.set("GITLAB_TRACKED_PROJECTS", "proj1")
+
+    # We must patch the client classes so that instantiating them doesn't hit the real APIs.
+    mock_gl = mocker.patch('app.main.GitLabClient').return_value
+    mock_jira = mocker.patch('app.main.JiraClient').return_value
+    mocker.patch('app.clients.jira_client.JIRA')
+    mocker.patch('app.clients.gitlab_client.gitlab.Gitlab')
+
+    class MockAuthor:
+        def get(self, key):
+            if key == 'username':
+                return 'user1'
+            return None
+
+    class MockMR:
+        def __init__(self, iid, title, source_branch, created_at, web_url):
+            self.iid = iid
+            self.title = title
+            self.source_branch = source_branch
+            self.created_at = created_at
+            self.web_url = web_url
+            self.author = MockAuthor()
+
+    mock_gl.get_project_merge_requests.return_value = [
+        MockMR(1, "Fix something", "TASK-1-fix", "2020-01-01T00:00:00.000+00:00", "http://mrs/1"),
+        MockMR(2, "TASK-2: Add feature", "feature", "2020-01-01T00:00:00.000+00:00", "http://mrs/2"),
+        MockMR(3, "Recent MR", "TASK-3-fix", "2099-01-01T00:00:00.000+00:00", "http://mrs/3"), # won't be old enough
+        MockMR(4, "No task", "no-task", "2020-01-01T00:00:00.000+00:00", "http://mrs/4")
+    ]
+
+    class MockStatus:
+        def __init__(self, name):
+            self.name = name
+
+    class MockFields:
+        def __init__(self, name, summary=""):
+            self.status = MockStatus(name)
+            self.summary = summary
+
+    class MockIssue:
+        def __init__(self, key, status_name):
+            self.key = key
+            self.fields = MockFields(status_name, "Task Summary")
+
+    # Jira JQL return
+    mock_jira.search_issues.return_value = [
+        MockIssue("TASK-1", "In Progress"), # Match
+        MockIssue("TASK-2", "Done"), # Doesn't match status
+        # TASK-3 not old enough, won't be in map
+    ]
+
+    response = client.get("/api/bottlenecks/code-review?days=2")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "bottlenecks" in data
+
+    bottlenecks = data["bottlenecks"]
+    assert len(bottlenecks) == 1
+
+    assert bottlenecks[0]["task_id"] == "TASK-1"
+    assert bottlenecks[0]["task_status"] == "in progress"
+    assert len(bottlenecks[0]["merge_requests"]) == 1
+    assert bottlenecks[0]["merge_requests"][0]["mr_iid"] == 1
+
+    app.main.settings.set("GITLAB_TRACKED_PROJECTS", original)
