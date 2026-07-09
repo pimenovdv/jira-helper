@@ -257,8 +257,6 @@ def delete_stale_branch(req: DeleteBranchRequest):
         raise HTTPException(status_code=500, detail="Failed to delete branch")
 
 
-from langchain_core.messages import HumanMessage
-
 class ChatRequest(BaseModel):
     query: str
 
@@ -268,16 +266,11 @@ async def chat_endpoint(req: ChatRequest):
         raise HTTPException(status_code=400, detail="Query is required")
 
     try:
-        result = app_graph.invoke({"messages": [HumanMessage(content=req.query)]})
-        # Extract the final answer from the last message
-        final_answer = "No answer found"
-        if "messages" in result and len(result["messages"]) > 0:
-            final_answer = result["messages"][-1].content
-
+        result = app_graph.invoke({"question": req.query})
         return {
             "question": req.query,
-            "answer": final_answer,
-            "documents": [] # Document retrieval is now handled by tools
+            "answer": result.get("answer", "No answer found"),
+            "documents": result.get("documents", [])
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

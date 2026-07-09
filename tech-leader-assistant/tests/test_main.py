@@ -52,12 +52,13 @@ async def test_override_confluence_link(mocker):
 
 def test_chat_endpoint(mocker):
     from fastapi.testclient import TestClient
-    from langchain_core.messages import AIMessage, HumanMessage
     from app.main import app
     client = TestClient(app)
     mock_invoke = mocker.patch("app.main.app_graph.invoke")
     mock_invoke.return_value = {
-        "messages": [AIMessage(content="Test answer")]
+        "question": "Hello",
+        "answer": "Test answer",
+        "documents": ["Doc 1"]
     }
 
     response = client.post("/api/chat", json={"query": "Hello"})
@@ -65,14 +66,9 @@ def test_chat_endpoint(mocker):
     data = response.json()
     assert data["question"] == "Hello"
     assert data["answer"] == "Test answer"
-    assert data["documents"] == []
+    assert data["documents"] == ["Doc 1"]
 
-    mock_invoke.assert_called_once()
-    called_arg = mock_invoke.call_args[0][0]
-    assert "messages" in called_arg
-    assert len(called_arg["messages"]) == 1
-    assert isinstance(called_arg["messages"][0], HumanMessage)
-    assert called_arg["messages"][0].content == "Hello"
+    mock_invoke.assert_called_once_with({"question": "Hello"})
 
 def test_chat_endpoint_empty_query():
     from fastapi.testclient import TestClient
@@ -175,17 +171,16 @@ def test_get_stale_branches(mocker):
     mock_gl = mocker.patch('app.main.GitLabClient').return_value
     mock_jira = mocker.patch('app.main.JiraClient').return_value
 
-    class MockCommit(dict):
-        def get(self, key, default=None):
+    class MockCommit:
+        def get(self, key):
             if key == 'committed_date':
                 return "2020-01-01T00:00:00.000+00:00" # Very old commit
-            return super().get(key, default)
+            return None
 
     class MockBranch:
         def __init__(self, name):
             self.name = name
-            self.commit = MockCommit()
-            self.attributes = {"commit": self.commit}
+            self.attributes = {'commit': {'committed_date': '2020-01-01T00:00:00.000+00:00'}}
 
     mock_gl.get_project_branches.side_effect = lambda pid: [MockBranch("TASK-1"), MockBranch("TASK-2"), MockBranch("no-task")] if pid == "proj1" else [MockBranch("TASK-3")]
 
