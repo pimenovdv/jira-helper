@@ -76,7 +76,7 @@
     - [x] Create Langchain Tool for **GitLab API** to search repositories, commits, and Merge Requests.
     - [x] Create Langchain Tool for **Confluence API** (global search) using CQL.
     - [x] Integrate existing OpenSearch semantic chunk search as a Tool.
-- [ ] **Agentic RAG Router**: Develop a smart routing agent capable of deciding which Tool(s) to call based on the user's prompt (e.g., direct API query vs semantic chunk search).
+- [x] **Agentic RAG Router**: Develop a smart routing agent capable of deciding which Tool(s) to call based on the user's prompt (e.g., direct API query vs semantic chunk search).
 - [ ] **Deep Research Workflow (LangGraph)**:
     - [ ] Implement **Agent-Planner**: Capable of breaking down complex prompts into a tree of sub-tasks.
     - [ ] Implement **Worker Agents**: Specialized agents capable of executing tasks using the Agentic RAG tools.

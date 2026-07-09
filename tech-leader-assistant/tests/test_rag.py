@@ -1,56 +1,40 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from app.rag import retrieve, generate, RAGState
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+
+# Import the new structures
+from app.rag import agent
 
 @pytest.fixture
 def mock_settings(mocker):
+    # Need to mock settings dynamically if it's imported as a module attribute in rag.py
+    # or just use patch on `app.rag.settings`
     mocker.patch("app.rag.settings.get", side_effect=lambda k, default=None: "dummy" if default is None else default)
 
-@patch("app.rag.OpenSearchVectorSearch")
-@patch("app.rag.OpenAIEmbeddings")
-def test_retrieve(mock_embeddings, mock_vectorsearch, mock_settings):
-    # Setup mock
-    mock_retriever = MagicMock()
-    mock_doc = MagicMock()
-    mock_doc.page_content = "Mocked document content"
-    mock_retriever.invoke.return_value = [mock_doc]
-
-    mock_vs_instance = MagicMock()
-    mock_vs_instance.as_retriever.return_value = mock_retriever
-    mock_vectorsearch.return_value = mock_vs_instance
-
-    state: RAGState = {"question": "How to deploy?", "documents": [], "answer": ""}
-
-    new_state = retrieve(state)
-
-    assert "documents" in new_state
-    assert len(new_state["documents"]) == 1
-    assert new_state["documents"][0] == "Mocked document content"
-    mock_retriever.invoke.assert_called_once_with("How to deploy?")
-
 @patch("app.rag.ChatOpenAI")
-def test_generate(mock_chatopenai, mock_settings):
-    # LangChain prompt | llm behavior relies on standard interface
-    # To mock the chain successfully, we'll patch the chain directly or ChatOpenAI properly.
+def test_agent_node(mock_chatopenai, mock_settings):
+    # Setup the mock ChatOpenAI instance and its bound version
     mock_llm_instance = MagicMock()
-    mock_response = MagicMock()
-    mock_response.content = "Mocked answer"
+    mock_bound_llm = MagicMock()
 
-    # Langchain uses Runnable protocol, `|` operator creates a RunnableSequence.
-    # When `invoke` is called on the chain, it calls `invoke` on prompt then `invoke` on llm.
-    mock_llm_instance.invoke.return_value = mock_response
+    mock_llm_instance.bind_tools.return_value = mock_bound_llm
     mock_chatopenai.return_value = mock_llm_instance
 
-    state: RAGState = {"question": "How to deploy?", "documents": ["Doc 1 content"], "answer": ""}
+    # Mock response from LLM
+    mock_response_message = AIMessage(content="I can help with that.")
+    mock_bound_llm.invoke.return_value = mock_response_message
 
-    with patch("app.rag.ChatPromptTemplate") as mock_prompt_template:
-        mock_prompt = MagicMock()
-        mock_chain = MagicMock()
-        mock_chain.invoke.return_value = mock_response
-        mock_prompt.__or__.return_value = mock_chain
-        mock_prompt_template.from_template.return_value = mock_prompt
+    state = {"messages": [HumanMessage(content="What is the status of TLA-123?")]}
 
-        new_state = generate(state)
+    new_state = agent(state)
 
-    assert "answer" in new_state
-    assert new_state["answer"] == "Mocked answer"
+    assert "messages" in new_state
+    assert len(new_state["messages"]) == 1
+    assert new_state["messages"][0] == mock_response_message
+
+    # Verify invoke was called correctly with system message and user message
+    call_args = mock_bound_llm.invoke.call_args[0][0]
+    assert len(call_args) == 2
+    assert isinstance(call_args[0], SystemMessage)
+    assert call_args[1].content == "What is the status of TLA-123?"
+
