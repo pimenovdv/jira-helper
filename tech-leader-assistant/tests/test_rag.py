@@ -37,4 +37,3 @@ def test_agent_node(mock_chatopenai, mock_settings):
     assert len(call_args) == 2
     assert isinstance(call_args[0], SystemMessage)
     assert call_args[1].content == "What is the status of TLA-123?"
-
