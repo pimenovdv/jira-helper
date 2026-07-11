@@ -440,3 +440,65 @@ def get_code_review_bottlenecks(days: int = 2):
                 })
 
     return {"bottlenecks": bottlenecks}
+
+@app.get("/api/debt/gap-analysis")
+def get_gap_analysis(days: int = 30):
+    try:
+        jira_client = JiraClient()
+
+        jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+        j_projects = [p.strip() for p in jira_projects if p.strip()]
+
+        if not j_projects:
+            return {"debt_tasks": []}
+
+        jql = f"project in ({','.join(j_projects)}) AND status in (Done, Closed) AND resolved >= -{days}d"
+        closed_issues = jira_client.search_issues(jql)
+
+        gitlab_client = GitLabClient()
+        confluence_client = ConfluenceClient()
+        tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+        tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+        debt_tasks = []
+        for issue in closed_issues:
+            task_id = issue.key
+            has_tests = False
+
+            # Check GitLab branches and commits
+            for pid in tracked_projects:
+                branches = gitlab_client.get_project_branches(pid)
+                matching_branches = [b for b in branches if task_id in b.name]
+
+                for branch in matching_branches:
+                    commits = gitlab_client.get_project_commits(pid, ref_name=branch.name)
+                    for commit in commits:
+                        msg = getattr(commit, 'message', '').lower()
+                        if 'test' in msg or 'cov' in msg or 'mock' in msg:
+                            has_tests = True
+                            break
+                    if has_tests:
+                        break
+                if has_tests:
+                    break
+
+            # Check Confluence documentation
+            has_docs = False
+            try:
+                cql = f'text ~ "{task_id}"'
+                docs_result = confluence_client.search_cql(cql, limit=1)
+                if docs_result and docs_result.get("results"):
+                    has_docs = True
+            except Exception:
+                pass
+
+            debt_tasks.append({
+                "task_id": task_id,
+                "task_summary": getattr(issue.fields, "summary", ""),
+                "missing_tests": not has_tests,
+                "missing_docs": not has_docs
+            })
+
+        return {"debt_tasks": [task for task in debt_tasks if task["missing_tests"] or task["missing_docs"]]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
