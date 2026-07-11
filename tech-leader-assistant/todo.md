@@ -64,9 +64,9 @@
 - [x] **Release Readiness Dashboard**: Automatically map a Jira Release to its associated tasks, and check if all feature branches (named by task IDs) have been merged into the release branch (named by release ID) in GitLab. Show a "Ready for Release" status.
 - [x] **Automated Release Notes Generator**: Fetch all tasks in a Jira Release, fetch their summaries/descriptions, and cross-reference with Confluence documentation to draft release notes. Publish the draft directly to Confluence.
 - [x] **Stale Branch Cleanup Assistant**: Identify feature branches in GitLab that are older than X days and correspond to Jira tasks that are already marked as 'Done' or 'Closed'. Provide a 1-click option to delete these stale branches.
-- [ ] **Code Review Bottleneck Detector**: Analyze GitLab MR approvals against Jira active sprint timelines. Highlight tasks where the MR has been open for > 2 days but the Jira task is still in "In Progress" or "Code Review" to identify blockers.
+- [x] **Code Review Bottleneck Detector**: Analyze GitLab MR approvals against Jira active sprint timelines. Highlight tasks where the MR has been open for > 2 days but the Jira task is still in "In Progress" or "Code Review" to identify blockers.
 - [x] **Completed Items**: Release Readiness Dashboard, Automated Release Notes Generator, Stale Branch Cleanup Assistant, Code Review Bottleneck Detector.
-- [ ] **Test Coverage & Documentation Gap Analysis**: Link GitLab test execution results to Jira tasks. If a task is done but its branch lacks new tests or related Confluence pages (auto-linked by feature), flag it as a potential technical debt.
+- [x] **Test Coverage & Documentation Gap Analysis**: Link GitLab test execution results to Jira tasks. If a task is done but its branch lacks new tests or related Confluence pages (auto-linked by feature), flag it as a potential technical debt.
 - [ ] **Developer Velocity Metrics**: Analyze Jira task completion time against GitLab commit/MR activity to identify periods of low velocity and suggest possible causes based on Confluence meeting notes or external blockers.
 - [ ] **Automated Code Review Assistant**: Integrate an LLM agent to automatically review new MRs in GitLab against organizational coding guidelines stored in Confluence, providing early feedback before human review.
 

@@ -366,6 +366,64 @@ def delete_stale_branch(req: DeleteBranchRequest):
     else:
         raise HTTPException(status_code=500, detail="Failed to delete branch")
 
+@app.get("/api/technical-debt/gap-analysis")
+def get_gap_analysis(days: int = 14):
+    jira_client = JiraClient()
+    confluence_client = ConfluenceClient()
+    gitlab_client = GitLabClient()
+
+    jql = f"status IN ('Done', 'Closed') AND updated >= -{days}d"
+    issues = jira_client.search_issues(jql)
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [pid.strip() for pid in tracked_projects if pid.strip()]
+
+    # Pre-fetch all merged MRs to avoid N+1 queries
+    project_mrs_map = {}
+    for pid in tracked_projects:
+        project_mrs_map[pid] = gitlab_client.get_project_merge_requests(pid, state="merged")
+
+    technical_debt = []
+
+    for issue in issues:
+        task_id = issue.key
+
+        # Check Confluence docs
+        cql = f'text ~ "{task_id}"'
+        docs = confluence_client.search_cql(cql)
+        has_docs = len(docs.get("results", [])) > 0
+
+        # Check MR tests
+        has_tests = False
+        related_mrs = []
+
+        task_id_pattern = re.compile(r"\b" + re.escape(task_id) + r"\b")
+
+        for pid, mrs in project_mrs_map.items():
+            for mr in mrs:
+                if task_id_pattern.search(mr.title) or task_id_pattern.search(mr.source_branch):
+                    related_mrs.append(mr)
+                    changes = gitlab_client.get_merge_request_changes(pid, mr.iid)
+                    for change in changes.get("changes", []):
+                        if "test" in change.get("new_path", "").lower() or "test" in change.get("old_path", "").lower():
+                            has_tests = True
+                            break
+                if has_tests:
+                    break
+            if has_tests:
+                break
+
+        if not has_docs or (related_mrs and not has_tests):
+            technical_debt.append({
+                "task_id": task_id,
+                "task_summary": getattr(issue.fields, "summary", ""),
+                "has_docs": has_docs,
+                "has_tests": has_tests,
+                "related_mrs": [{"iid": mr.iid, "title": mr.title, "web_url": mr.web_url} for mr in related_mrs]
+            })
+
+    return {"technical_debt": technical_debt}
+
 @app.get("/api/bottlenecks/code-review")
 def get_code_review_bottlenecks(days: int = 2):
     gitlab_client = GitLabClient()
