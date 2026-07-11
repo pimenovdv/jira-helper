@@ -310,3 +310,96 @@ def test_get_code_review_bottlenecks(mocker):
     assert bottlenecks[0]["merge_requests"][0]["mr_iid"] == 1
 
     app.main.settings.set("GITLAB_TRACKED_PROJECTS", original)
+
+def test_get_gap_analysis(mocker):
+    import app.main
+    original = app.main.settings.get("GITLAB_TRACKED_PROJECTS")
+    app.main.settings.set("GITLAB_TRACKED_PROJECTS", "proj1")
+
+    mock_gl = mocker.patch('app.main.GitLabClient').return_value
+    mock_jira = mocker.patch('app.main.JiraClient').return_value
+    mock_conf = mocker.patch('app.main.ConfluenceClient').return_value
+    mocker.patch('app.clients.jira_client.JIRA')
+    mocker.patch('app.clients.gitlab_client.gitlab.Gitlab')
+    mocker.patch('app.clients.confluence_client.Confluence')
+
+    # Mock Jira Issues
+    class MockIssue:
+        def __init__(self, key, summary):
+            self.key = key
+            class Fields:
+                def __init__(self, s):
+                    self.summary = s
+            self.fields = Fields(summary)
+
+    mock_jira.search_issues.return_value = [
+        MockIssue("TASK-1", "Task 1 (No docs, has tests)"),
+        MockIssue("TASK-2", "Task 2 (Has docs, no tests)"),
+        MockIssue("TASK-3", "Task 3 (Has docs, has tests)"),
+        MockIssue("TASK-4", "Task 4 (No docs, no MRs)")
+    ]
+
+    # Mock Confluence Docs
+    def mock_search_cql(cql):
+        if "TASK-1" in cql or "TASK-4" in cql:
+            return {"results": []}
+        return {"results": [{"id": "123", "title": "Doc for Task"}]}
+    mock_conf.search_cql.side_effect = mock_search_cql
+
+    # Mock GitLab MRs
+    class MockMR:
+        def __init__(self, iid, title, branch):
+            self.iid = iid
+            self.title = title
+            self.source_branch = branch
+            self.web_url = f"http://example.com/mr/{iid}"
+
+    def mock_get_project_merge_requests(pid, state):
+        return [
+            MockMR(1, "Merge TASK-1", "feature/TASK-1"),
+            MockMR(2, "Merge TASK-2", "feature/TASK-2"),
+            MockMR(3, "Merge TASK-3", "feature/TASK-3")
+        ]
+    mock_gl.get_project_merge_requests.side_effect = mock_get_project_merge_requests
+
+    # Mock MR Changes
+    def mock_get_merge_request_changes(pid, mr_iid):
+        if mr_iid == 1:
+            return {"changes": [{"new_path": "src/test_app.py", "old_path": "src/test_app.py"}]}
+        elif mr_iid == 2:
+            return {"changes": [{"new_path": "src/app.py", "old_path": "src/app.py"}]}
+        elif mr_iid == 3:
+            return {"changes": [{"new_path": "src/test_app.py", "old_path": "src/test_app.py"}]}
+        return {"changes": []}
+    mock_gl.get_merge_request_changes.side_effect = mock_get_merge_request_changes
+
+    from fastapi.testclient import TestClient
+    from app.main import app as fastapi_app
+    client = TestClient(fastapi_app)
+
+    response = client.get("/api/technical-debt/gap-analysis?days=14")
+
+    app.main.settings.set("GITLAB_TRACKED_PROJECTS", original)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "technical_debt" in data
+    td = data["technical_debt"]
+
+    # TASK-1: No docs, has tests -> should be in TD
+    # TASK-2: Has docs, no tests (but has MR) -> should be in TD
+    # TASK-3: Has docs, has tests -> should NOT be in TD
+    # TASK-4: No docs, no MRs -> should be in TD
+
+    task_ids = [t["task_id"] for t in td]
+    assert "TASK-1" in task_ids
+    assert "TASK-2" in task_ids
+    assert "TASK-3" not in task_ids
+    assert "TASK-4" in task_ids
+
+    # Check TASK-2 related_mrs structure
+    t2 = next(t for t in td if t["task_id"] == "TASK-2")
+    assert not t2["has_tests"]
+    assert t2["has_docs"]
+    assert len(t2["related_mrs"]) == 1
+    assert t2["related_mrs"][0]["iid"] == 2
