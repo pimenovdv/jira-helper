@@ -560,3 +560,86 @@ def get_gap_analysis(days: int = 30):
         return {"debt_tasks": [task for task in debt_tasks if task["missing_tests"] or task["missing_docs"]]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/metrics/developer-velocity")
+def get_developer_velocity(days: int = 30):
+    try:
+        jira_client = JiraClient()
+        gitlab_client = GitLabClient()
+        confluence_client = ConfluenceClient()
+
+        jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+        j_projects = [p.strip() for p in jira_projects if p.strip()]
+
+        if not j_projects:
+            return {"velocity_metrics": []}
+
+        jql = f"project in ({','.join(j_projects)}) AND status in (Done, Closed) AND resolved >= -{days}d"
+        closed_issues = jira_client.search_issues(jql)
+
+        tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+        tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+        metrics = []
+
+        for issue in closed_issues:
+            task_id = issue.key
+            created_str = getattr(issue.fields, "created", None)
+            resolved_str = getattr(issue.fields, "resolutiondate", None)
+
+            completion_time_days = 0
+            if created_str and resolved_str:
+                try:
+                    fmt = "%Y-%m-%dT%H:%M:%S.%f%z"
+                    try:
+                        created_date = datetime.strptime(created_str, fmt)
+                        resolved_date = datetime.strptime(resolved_str, fmt)
+                    except ValueError:
+                        fmt_no_ms = "%Y-%m-%dT%H:%M:%S%z"
+                        created_date = datetime.strptime(created_str, fmt_no_ms)
+                        resolved_date = datetime.strptime(resolved_str, fmt_no_ms)
+
+                    completion_time_days = (resolved_date - created_date).days
+                except Exception:
+                    pass
+
+            mr_count = 0
+            commit_count = 0
+
+            for pid in tracked_projects:
+                mrs = gitlab_client.get_project_merge_requests(pid, state="all")
+                for mr in mrs:
+                    if task_id in mr.title or task_id in mr.source_branch:
+                        mr_count += 1
+
+                branches = gitlab_client.get_project_branches(pid)
+                matching_branches = [b for b in branches if task_id in b.name]
+                for branch in matching_branches:
+                    commits = gitlab_client.get_project_commits(pid, ref_name=branch.name)
+                    commit_count += len(commits)
+
+            is_low_velocity = completion_time_days > 5
+
+            possible_causes = []
+            if is_low_velocity:
+                cql = f'text ~ "{task_id}"'
+                docs = confluence_client.search_cql(cql)
+                for doc in docs.get("results", []):
+                    possible_causes.append({
+                        "title": doc.get("title", ""),
+                        "url": f"{confluence_client.url}{doc.get('_links', {}).get('webui', '')}"
+                    })
+
+            metrics.append({
+                "task_id": task_id,
+                "task_summary": getattr(issue.fields, "summary", ""),
+                "completion_time_days": completion_time_days,
+                "mr_count": mr_count,
+                "commit_count": commit_count,
+                "is_low_velocity": is_low_velocity,
+                "possible_causes": possible_causes
+            })
+
+        return {"velocity_metrics": metrics}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

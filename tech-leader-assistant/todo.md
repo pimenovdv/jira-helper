@@ -67,7 +67,7 @@
 - [x] **Code Review Bottleneck Detector**: Analyze GitLab MR approvals against Jira active sprint timelines. Highlight tasks where the MR has been open for > 2 days but the Jira task is still in "In Progress" or "Code Review" to identify blockers.
 - [x] **Completed Items**: Release Readiness Dashboard, Automated Release Notes Generator, Stale Branch Cleanup Assistant, Code Review Bottleneck Detector.
 - [x] **Test Coverage & Documentation Gap Analysis**: Link GitLab test execution results to Jira tasks. If a task is done but its branch lacks new tests or related Confluence pages (auto-linked by feature), flag it as a potential technical debt.
-- [ ] **Developer Velocity Metrics**: Analyze Jira task completion time against GitLab commit/MR activity to identify periods of low velocity and suggest possible causes based on Confluence meeting notes or external blockers.
+- [x] **Developer Velocity Metrics**: Analyze Jira task completion time against GitLab commit/MR activity to identify periods of low velocity and suggest possible causes based on Confluence meeting notes or external blockers.
 - [ ] **Automated Code Review Assistant**: Integrate an LLM agent to automatically review new MRs in GitLab against organizational coding guidelines stored in Confluence, providing early feedback before human review.
 
 ### Phase 7: Advanced RAG & Agentic Workflows (Agentic RAG & Deep Research)
