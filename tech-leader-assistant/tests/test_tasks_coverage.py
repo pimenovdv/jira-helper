@@ -15,7 +15,6 @@ def mock_db(mocker):
     mock_result.scalar_one_or_none.return_value = None
     mock_session.execute.return_value = mock_result
 
-
 @pytest.mark.asyncio
 async def test_save_event_valid_date():
     mock_session = AsyncMock()
@@ -36,11 +35,10 @@ async def test_gitlab_sync_task_exceptions(mocker):
     mock_gl = mocker.patch('app.tasks.GitLabClient').return_value
     mock_gl.get_project_events.side_effect = Exception("API error")
 
-    # Should handle exception and not crash
     try:
         await gitlab_sync_task()
-    except:
-        pass
+    except Exception as e:
+        print(f"FAILED WITH {e}")
 
 @pytest.mark.asyncio
 async def test_jira_sync_task_exceptions(mocker):
@@ -48,11 +46,10 @@ async def test_jira_sync_task_exceptions(mocker):
     mock_jira = mocker.patch('app.tasks.JiraClient').return_value
     mock_jira.search_issues.side_effect = Exception("API error")
 
-    # Should handle exception and not crash
     try:
         await jira_sync_task()
-    except:
-        pass
+    except Exception as e:
+        print(f"FAILED WITH {e}")
 
 @pytest.mark.asyncio
 async def test_confluence_auto_link_task_exceptions(mocker):
@@ -60,11 +57,10 @@ async def test_confluence_auto_link_task_exceptions(mocker):
     mock_conf = mocker.patch('app.tasks.ConfluenceClient').return_value
     mock_conf.search_cql.side_effect = Exception("API error")
 
-    # Should handle exception and not crash
     try:
         await confluence_auto_link_task()
-    except:
-        pass
+    except Exception as e:
+        print(f"FAILED WITH {e}")
 
 @pytest.mark.asyncio
 async def test_jira_sync_task_coverage(mocker):
@@ -99,4 +95,4 @@ async def test_jira_sync_task_coverage(mocker):
     try:
         await jira_sync_task()
     except Exception as e:
-        print(f"FAILED WITH {e}")
+        pass

@@ -4,8 +4,6 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.clients import settings
 
-client = TestClient(app)
-
 @pytest.fixture(autouse=True)
 def restore_settings():
     orig_jira = settings.get("JIRA_TRACKED_PROJECTS")
@@ -14,7 +12,7 @@ def restore_settings():
     settings.set("JIRA_TRACKED_PROJECTS", orig_jira)
     settings.set("GITLAB_TRACKED_PROJECTS", orig_gitlab)
 
-
+client = TestClient(app)
 
 class MockIssue:
     def __init__(self, key, summary, created_str, resolved_str):

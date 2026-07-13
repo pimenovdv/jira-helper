@@ -53,7 +53,6 @@ def test_jira_client_exceptions(mocker):
 def test_neo4j_client_exceptions(mocker):
     mocker.patch('app.clients.neo4j_client.GraphDatabase')
     nc = Neo4jClient()
-    # It just connects on init, but we can call ping
     nc.driver.verify_connectivity.side_effect = Exception("Fail")
     assert nc.ping()["status"] == "error"
 

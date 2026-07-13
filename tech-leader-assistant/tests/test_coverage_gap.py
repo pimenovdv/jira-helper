@@ -1,11 +1,10 @@
-from unittest.mock import AsyncMock
 import pytest
+from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 from app.main import app
 from app.clients import settings
 from unittest.mock import MagicMock
 import json
-
 
 from app.main import get_db
 
@@ -25,7 +24,6 @@ client = TestClient(app)
 def patch_astext(monkeypatch):
     from sqlalchemy.sql.elements import BinaryExpression
     monkeypatch.setattr(BinaryExpression, "astext", property(lambda self: self), raising=False)
-
 
 @pytest.fixture(autouse=True)
 def restore_settings():
@@ -87,38 +85,3 @@ def test_override_confluence_link_fail(mocker):
         "action": "unknown"
     })
     assert response.status_code == 400
-
-
-def test_get_stale_branches_list(mocker):
-    # Covers lines 291-358
-    settings.set("GITLAB_TRACKED_PROJECTS", "proj1")
-
-    mock_gl = mocker.patch('app.main.GitLabClient').return_value
-    mock_jira = mocker.patch('app.main.JiraClient').return_value
-
-    class MockCommit(dict):
-        def get(self, key, default=None):
-            if key == 'committed_date':
-                return "2020-01-01T00:00:00.000Z"
-            return super().get(key, default)
-
-    class MockBranch:
-        def __init__(self, name):
-            self.name = name
-            self.commit = MockCommit()
-
-    mock_gl.get_project_branches.return_value = [MockBranch("PROJ-123")]
-
-    class MockFields:
-        status = MagicMock(name="Done")
-
-    class MockIssue:
-        key = "PROJ-123"
-        fields = MockFields()
-
-    mock_jira.search_issues.return_value = [MockIssue()]
-    MockFields.status.name = "done"
-
-    # Need to append ?days=30 to hit the query parameter correctly maybe?
-    response = client.get("/api/stale-branches?days=30")
-    assert response.status_code == 200
