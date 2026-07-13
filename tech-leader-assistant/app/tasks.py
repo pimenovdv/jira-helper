@@ -527,3 +527,61 @@ def generate_release_notes_task():
                 logger.error(f"Failed to generate or publish release notes for {release_name}: {e}")
 
     return "Release notes task completed"
+
+
+async def automated_code_review_task():
+    """
+    Task to review code changes in all open MRs across tracked repositories,
+    evaluating them against coding guidelines stored in OpenSearch,
+    and submitting automated feedback via MR notes in GitLab.
+    """
+    logger.info("Starting automated code review task...")
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients.opensearch_client import OpenSearchClient
+    from app.clients import settings
+    from langchain_openai import ChatOpenAI
+    from langchain_core.messages import HumanMessage, AIMessage
+
+    gitlab_client = GitLabClient()
+    opensearch_client = OpenSearchClient()
+
+    # Create the LLM instance
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                # Get changes
+                changes = gitlab_client.get_merge_request_changes(project_id, mr.iid)
+                diffs = [change.get('diff', '') for change in changes.get('changes', []) if change.get('diff')]
+
+                if not diffs:
+                    continue
+
+                diff_text = "\n".join(diffs)
+
+                # Query OpenSearch for coding guidelines
+                query = {
+                    "query": {
+                        "match": {
+                            "content": "coding guidelines standards"
+                        }
+                    }
+                }
+                os_results = opensearch_client.search(index_name="confluence", body=query, size=3)
+                guidelines = "\n".join([hit['_source'].get('content', '') for hit in os_results.get('hits', {}).get('hits', [])])
+
+                # Formulate the prompt
+                prompt = f"Вы - эксперт-рецензент кода. Пожалуйста, проанализируйте следующий diff-файл и дайте отзыв. Убедитесь, что код соответствует нашим стандартам кодирования, если они применимы.\n\nDiff:\n{diff_text}\n\nСтандарты кодирования:\n{guidelines}"
+
+                # Get LLM review
+                review_response = llm.invoke([HumanMessage(content=prompt)])
+
+                # Post review as a note on the MR
+                gitlab_client.create_mr_note(project_id, mr.iid, review_response.content)
+        except Exception as e:
+            logger.error(f"Error in automated code review for project {project_id}: {e}")
