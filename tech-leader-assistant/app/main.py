@@ -286,86 +286,6 @@ class DeleteBranchRequest(BaseModel):
     project_id: str
     branch_name: str
 
-@app.get("/api/stale-branches")
-def get_stale_branches(days: int = 30):
-    try:
-        gitlab_client = GitLabClient()
-        jira_client = JiraClient()
-
-        tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
-
-        stale_branches = []
-        task_branch_map = {}
-
-        # Calculate the cutoff date
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
-
-        for pid in tracked_projects:
-            pid = pid.strip()
-            if not pid: continue
-
-            branches = gitlab_client.get_project_branches(pid)
-            for branch in branches:
-                branch_name = branch.name
-
-                # Extract task ID (e.g., PROJ-123)
-                match = re.search(r'([A-Z]+-\d+)', branch_name)
-                if not match:
-                    continue
-
-                task_id = match.group(1)
-
-                # Check commit date
-                commit_date_str = branch.commit.get('committed_date') if getattr(branch, 'commit', None) else None
-                if commit_date_str:
-                    try:
-                        # ISO 8601 string from GitLab, parse it
-                        commit_date = datetime.fromisoformat(commit_date_str.replace("Z", "+00:00"))
-                        if commit_date.tzinfo is None:
-                            commit_date = commit_date.replace(tzinfo=timezone.utc)
-                        if commit_date > cutoff_date:
-                            continue # Not stale enough
-                    except Exception:
-                        pass # Couldn't parse date, maybe keep it to be safe or ignore? Let's check Jira anyway.
-
-                if task_id not in task_branch_map:
-                    task_branch_map[task_id] = []
-
-                task_branch_map[task_id].append({
-                    "project_id": pid,
-                    "branch_name": branch_name,
-                    "commit_date": commit_date_str
-                })
-
-        if not task_branch_map:
-            return {"stale_branches": []}
-
-        # Batch query Jira for these tasks
-        task_ids = list(task_branch_map.keys())
-        jql = f"key in ({','.join(task_ids)})"
-
-        issues = jira_client.search_issues(jql)
-
-        for issue in issues:
-            status = getattr(getattr(issue.fields, "status", None), "name", "").lower()
-            if status in ["done", "closed"]:
-                # Tasks are done, these branches are stale
-                if issue.key in task_branch_map:
-                    stale_branches.extend(task_branch_map[issue.key])
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    return {"stale_branches": stale_branches}
-
-@app.post("/api/stale-branches/delete")
-def delete_stale_branch(req: DeleteBranchRequest):
-    gitlab_client = GitLabClient()
-    success = gitlab_client.delete_branch(req.project_id, req.branch_name)
-    if success:
-        return {"status": "success"}
-    else:
-        raise HTTPException(status_code=500, detail="Failed to delete branch")
-
 @app.get("/api/technical-debt/gap-analysis")
 def get_gap_analysis(days: int = 14):
     jira_client = JiraClient()
@@ -558,5 +478,88 @@ def get_gap_analysis(days: int = 30):
             })
 
         return {"debt_tasks": [task for task in debt_tasks if task["missing_tests"] or task["missing_docs"]]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/metrics/developer-velocity")
+def get_developer_velocity(days: int = 30):
+    try:
+        jira_client = JiraClient()
+        gitlab_client = GitLabClient()
+        confluence_client = ConfluenceClient()
+
+        jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+        j_projects = [p.strip() for p in jira_projects if p.strip()]
+
+        if not j_projects:
+            return {"velocity_metrics": []}
+
+        jql = f"project in ({','.join(j_projects)}) AND status in (Done, Closed) AND resolved >= -{days}d"
+        closed_issues = jira_client.search_issues(jql)
+
+        tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+        tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+        metrics = []
+
+        for issue in closed_issues:
+            task_id = issue.key
+            created_str = getattr(issue.fields, "created", None)
+            resolved_str = getattr(issue.fields, "resolutiondate", None)
+
+            completion_time_days = 0
+            if created_str and resolved_str:
+                try:
+                    fmt = "%Y-%m-%dT%H:%M:%S.%f%z"
+                    try:
+                        created_date = datetime.strptime(created_str, fmt)
+                        resolved_date = datetime.strptime(resolved_str, fmt)
+                    except ValueError:
+                        fmt_no_ms = "%Y-%m-%dT%H:%M:%S%z"
+                        created_date = datetime.strptime(created_str, fmt_no_ms)
+                        resolved_date = datetime.strptime(resolved_str, fmt_no_ms)
+
+                    completion_time_days = (resolved_date - created_date).days
+                except Exception:
+                    pass
+
+            mr_count = 0
+            commit_count = 0
+
+            for pid in tracked_projects:
+                mrs = gitlab_client.get_project_merge_requests(pid, state="all")
+                for mr in mrs:
+                    if task_id in mr.title or task_id in mr.source_branch:
+                        mr_count += 1
+
+                branches = gitlab_client.get_project_branches(pid)
+                matching_branches = [b for b in branches if task_id in b.name]
+                for branch in matching_branches:
+                    commits = gitlab_client.get_project_commits(pid, ref_name=branch.name)
+                    commit_count += len(commits)
+
+            is_low_velocity = completion_time_days > 5
+
+            possible_causes = []
+            if is_low_velocity:
+                cql = f'text ~ "{task_id}"'
+                docs = confluence_client.search_cql(cql)
+                for doc in docs.get("results", []):
+                    possible_causes.append({
+                        "title": doc.get("title", ""),
+                        "url": f"{confluence_client.url}{doc.get('_links', {}).get('webui', '')}"
+                    })
+
+            metrics.append({
+                "task_id": task_id,
+                "task_summary": getattr(issue.fields, "summary", ""),
+                "completion_time_days": completion_time_days,
+                "mr_count": mr_count,
+                "commit_count": commit_count,
+                "is_low_velocity": is_low_velocity,
+                "possible_causes": possible_causes
+            })
+
+        return {"velocity_metrics": metrics}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
