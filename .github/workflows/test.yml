@@ -21,11 +21,11 @@ jobs:
         python-version: "3.12"
 
     - name: Install dependencies
-      run: cd tech-leader-assistant && uv sync --dev
+      run: uv sync --dev
 
     - name: Install Playwright Browsers
-      run: cd tech-leader-assistant && uv run playwright install --with-deps
+      run: uv run playwright install --with-deps
 
     - name: Run tests with pytest
       run: |
-        cd tech-leader-assistant && uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=90 tests/
+        uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=90 tests/

@@ -6,16 +6,6 @@ from app.clients import settings
 
 client = TestClient(app)
 
-@pytest.fixture(autouse=True)
-def restore_settings():
-    orig_jira = settings.get("JIRA_TRACKED_PROJECTS")
-    orig_gitlab = settings.get("GITLAB_TRACKED_PROJECTS")
-    yield
-    settings.set("JIRA_TRACKED_PROJECTS", orig_jira)
-    settings.set("GITLAB_TRACKED_PROJECTS", orig_gitlab)
-
-
-
 class MockIssue:
     def __init__(self, key, summary):
         self.key = key
