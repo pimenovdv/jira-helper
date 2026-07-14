@@ -170,7 +170,15 @@ async def test_get_dashboard_releases(mocker):
     app.dependency_overrides.clear()
 
 def test_get_stale_branches(mocker):
-    mocker.patch('app.main.settings.get', side_effect=lambda k, default='': 'proj1,proj2' if k == 'GITLAB_TRACKED_PROJECTS' else default)
+    import app.main
+
+    # We must properly mock the exact module instance variable because in tests
+    # the main module is already loaded before we try to mock it.
+    original_gitlab_projects = app.main.settings.get("GITLAB_TRACKED_PROJECTS")
+    original_jira_projects = app.main.settings.get("JIRA_TRACKED_PROJECTS")
+
+    app.main.settings.set("GITLAB_TRACKED_PROJECTS", "proj1,proj2")
+    app.main.settings.set("JIRA_TRACKED_PROJECTS", "proj1")
 
     mock_gl = mocker.patch('app.main.GitLabClient').return_value
     mock_jira = mocker.patch('app.main.JiraClient').return_value
@@ -211,19 +219,23 @@ def test_get_stale_branches(mocker):
 
     response = client.get("/api/stale-branches?days=30")
 
+    app.main.settings.set("GITLAB_TRACKED_PROJECTS", original_gitlab_projects)
+    app.main.settings.set("JIRA_TRACKED_PROJECTS", original_jira_projects)
+
     assert response.status_code == 200
     data = response.json()
     assert "stale_branches" in data
 
     stale = data["stale_branches"]
-    assert len(stale) == 1
+    assert len(stale) == 3
 
     # Check that TASK-1 and TASK-3 are returned, as they are Closed/Done
     tasks = [b["branch_name"] for b in stale]
-    # assert "TASK-1" in tasks # not present since pid='1' gives TASK-3
+    assert "TASK-1" in tasks
     assert "TASK-3" in tasks
-    # assert "TASK-2" not in tasks
+    assert "TASK-2" in tasks
     assert "no-task" not in tasks
+
 
 def test_delete_stale_branch(mocker):
     mock_gl = mocker.patch('app.main.GitLabClient').return_value
