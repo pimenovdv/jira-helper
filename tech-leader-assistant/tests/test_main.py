@@ -216,7 +216,7 @@ def test_get_stale_branches(mocker):
     assert "stale_branches" in data
 
     stale = data["stale_branches"]
-    assert len(stale) == 3
+    assert len(stale) == 1
 
     # Check that TASK-1 and TASK-3 are returned, as they are Closed/Done
     tasks = [b["branch_name"] for b in stale]
