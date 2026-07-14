@@ -19,6 +19,9 @@ from .clients.confluence_client import ConfluenceClient
 from .clients.neo4j_client import Neo4jClient
 from .clients.opensearch_client import OpenSearchClient
 from .scheduler import start_scheduler, shutdown_scheduler
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_community.vectorstores import OpenSearchVectorSearch
 from .database import get_db, engine, Base
 from .models import Event
 from .rag import app_graph
@@ -343,6 +346,75 @@ def get_gap_analysis(days: int = 14):
             })
 
     return {"technical_debt": technical_debt}
+
+@app.post("/api/projects/{project_id}/merge_requests/{mr_iid}/review")
+def create_automated_code_review(project_id: str, mr_iid: int):
+    try:
+        gitlab_client = GitLabClient()
+        changes_data = gitlab_client.get_merge_request_changes(project_id, mr_iid)
+
+        if not changes_data or "changes" not in changes_data:
+            raise HTTPException(status_code=404, detail="MR or changes not found")
+
+        changes = changes_data["changes"]
+        diffs_text = ""
+        for change in changes:
+            diffs_text += f"File: {change.get('new_path')}\n"
+            diffs_text += f"Diff: {change.get('diff', '')}\n\n"
+
+        openai_api_key = settings.get("OPENAI_API_KEY", "")
+        if not openai_api_key:
+            raise HTTPException(status_code=500, detail="OPENAI_API_KEY not found")
+
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+
+        os_url = settings.get("OPENSEARCH_URL")
+        os_user = settings.get("OPENSEARCH_USER")
+        os_password = settings.get("OPENSEARCH_PASSWORD")
+        verify_certs = settings.get("OPENSEARCH_VERIFY_CERTS", default=True)
+
+        vectorstore = OpenSearchVectorSearch(
+            opensearch_url=os_url,
+            index_name="confluence-rag-index",
+            embedding_function=embeddings,
+            http_auth=(os_user, os_password),
+            use_ssl=True,
+            verify_certs=verify_certs,
+            ssl_assert_hostname=verify_certs,
+            ssl_show_warn=not verify_certs,
+        )
+        retriever = vectorstore.as_retriever()
+
+        # We query OpenSearch for coding guidelines or relevant context
+        docs = retriever.invoke("coding guidelines code review best practices")
+        context_text = "\n\n".join([doc.page_content for doc in docs])
+
+        llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, openai_api_key=openai_api_key)
+
+        prompt = ChatPromptTemplate.from_template(
+            "Ты — опытный разработчик и автоматизированный ассистент code review. "
+            "Твоя задача проанализировать изменения в Merge Request и оставить конструктивный отзыв "
+            "на основе корпоративных стандартов.\n\n"
+            "Корпоративные стандарты (контекст из базы знаний):\n{context}\n\n"
+            "Изменения в коде (Git diff):\n{diffs}\n\n"
+            "Напиши ревью на русском языке. Укажи на потенциальные ошибки, нарушения стандартов или предложи улучшения. "
+            "Если всё выглядит хорошо, так и скажи."
+        )
+
+        chain = prompt | llm
+        response = chain.invoke({"context": context_text, "diffs": diffs_text})
+        review_note = response.content
+
+        success = gitlab_client.create_merge_request_note(project_id, mr_iid, review_note)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to post note to GitLab")
+
+        return {"status": "success", "review": review_note}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/bottlenecks/code-review")
 def get_code_review_bottlenecks(days: int = 2):
