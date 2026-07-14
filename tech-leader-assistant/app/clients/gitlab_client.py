@@ -87,3 +87,12 @@ class GitLabClient(BaseClient):
             return project.commits.list(ref_name=ref_name, all=True)
         except Exception as e:
             return []
+
+    def create_merge_request_note(self, project_id: str, mr_iid: int, body: str) -> bool:
+        try:
+            project = self.client.projects.get(project_id)
+            mr = project.mergerequests.get(mr_iid)
+            mr.notes.create({'body': body})
+            return True
+        except Exception as e:
+            return False
