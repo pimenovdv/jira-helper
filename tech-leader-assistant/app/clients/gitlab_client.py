@@ -88,11 +88,14 @@ class GitLabClient(BaseClient):
         except Exception as e:
             return []
 
-    def create_merge_request_note(self, project_id: str, mr_iid: int, body: str) -> bool:
+    def create_mr_note(self, project_id: str, mr_iid: int, body: str) -> dict | None:
+        """
+        Creates a note (comment) on a specific merge request.
+        """
         try:
             project = self.client.projects.get(project_id)
             mr = project.mergerequests.get(mr_iid)
-            mr.notes.create({'body': body})
-            return True
+            note = mr.notes.create({'body': body})
+            return {"id": note.id, "body": note.body}
         except Exception as e:
-            return False
+            return None
