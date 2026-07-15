@@ -1,3 +1,4 @@
+from app.deep_research import deep_research_graph
 from fastapi import FastAPI, Depends
 import re
 from datetime import datetime, timezone, timedelta
@@ -633,5 +634,34 @@ def get_developer_velocity(days: int = 30):
             })
 
         return {"velocity_metrics": metrics}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class DeepResearchRequest(BaseModel):
+    query: str
+
+@app.post("/api/deep-research")
+def perform_deep_research(req: DeepResearchRequest):
+    try:
+        # We start the graph
+        initial_state = {
+            "original_query": req.query,
+            "plan": [],
+            "current_task_id": None,
+            "completed_tasks": {},
+            "task_results": {},
+            "final_report": "",
+            "messages": []
+        }
+
+        # Invoke is synchronous and blocks until END
+        result = deep_research_graph.invoke(initial_state)
+
+        return {
+            "status": "success",
+            "report": result.get("final_report", ""),
+            "plan": [p.model_dump() for p in result.get("plan", [])],
+            "task_results": result.get("task_results", {})
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

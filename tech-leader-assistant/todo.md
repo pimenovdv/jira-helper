@@ -29,46 +29,11 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Phase 1: Foundation & Skeleton (Current Phase)
-- [x] Initialize python project with `uv` (FastAPI, dynaconf, OpenAI, langgraph, gitlab, jira, atlassian, neo4j, opensearch).
-- [x] Create project structure and guidelines (`AGENTS.md`).
-- [x] Create `Dockerfile` and `docker-compose.yml`.
-- [x] Implement simple FastAPI backend for basic health checks and dummy client connections.
-- [x] Implement simple HTML+JS frontend to visualize system statuses.
-
-### Phase 2: Data Ingestion & Clients
-- [x] Implement genuine `GitLabClient` with token authentication.
-- [x] Implement genuine `JiraClient` and `ConfluenceClient`.
-- [x] Implement `Neo4jClient` for graphing relationships (Task -> Branch -> Project).
-- [x] Implement `OpenSearchClient` for document storage.
-- [x] Set up APScheduler jobs in FastAPI lifespan to run periodic ingestion tasks.
-
-### Phase 3: Core Logic & Processing
-- [x] Parse GitLab webhooks or scheduled polls to build timeline event streams.
-- [x] Cross-match Jira task IDs with GitLab branch names.
-- [x] Build Confluence auto-linking logic (string matching & manual overrides).
-- [x] Process Confluence docs: chunking, embedding generation (OpenAI), and OpenSearch ingestion.
-
-### Phase 4: AI & RAG Pipeline
-- [x] Build LangGraph workflow for RAG querying.
-- [x] Implement Langchain/OpenAI integrations to query OpenSearch indices.
-- [x] Expose chat/query endpoint in FastAPI.
-
-### Phase 5: UI/UX & Frontend
-- [x] Replace basic JS with a more robust framework if needed, or build complex Vanilla JS views.
-- [x] Implement Timeline UI (vis.js or similar).
-- [x] Implement Sprint/Task dashboard.
-- [x] Implement RAG Chat interface.
-
-### Phase 6: Future Feature Ideas (Cross-Service Intelligence)
-- [x] **Release Readiness Dashboard**: Automatically map a Jira Release to its associated tasks, and check if all feature branches (named by task IDs) have been merged into the release branch (named by release ID) in GitLab. Show a "Ready for Release" status.
-- [x] **Automated Release Notes Generator**: Fetch all tasks in a Jira Release, fetch their summaries/descriptions, and cross-reference with Confluence documentation to draft release notes. Publish the draft directly to Confluence.
-- [x] **Stale Branch Cleanup Assistant**: Identify feature branches in GitLab that are older than X days and correspond to Jira tasks that are already marked as 'Done' or 'Closed'. Provide a 1-click option to delete these stale branches.
-- [x] **Code Review Bottleneck Detector**: Analyze GitLab MR approvals against Jira active sprint timelines. Highlight tasks where the MR has been open for > 2 days but the Jira task is still in "In Progress" or "Code Review" to identify blockers.
-- [x] **Completed Items**: Release Readiness Dashboard, Automated Release Notes Generator, Stale Branch Cleanup Assistant, Code Review Bottleneck Detector.
-- [x] **Test Coverage & Documentation Gap Analysis**: Link GitLab test execution results to Jira tasks. If a task is done but its branch lacks new tests or related Confluence pages (auto-linked by feature), flag it as a potential technical debt.
-- [ ] **Developer Velocity Metrics**: Analyze Jira task completion time against GitLab commit/MR activity to identify periods of low velocity and suggest possible causes based on Confluence meeting notes or external blockers.
-- [x] **Automated Code Review Assistant**: Integrate an LLM agent to automatically review new MRs in GitLab against organizational coding guidelines stored in Confluence, providing early feedback before human review.
+### Phase 1-6: Foundation, Ingestion, Pipeline & Completed Features
+- [x] Foundation & Architecture (uv, Docker, FastAPI structure, Dummy frontend/backend)
+- [x] Data Clients (GitLab, Jira, Confluence, Neo4j, OpenSearch) & APScheduler
+- [x] Processing & RAG Pipeline (Cross-matching, Confluence chunks, OpenSearch embeddings, LangGraph Agent RAG router, UI views)
+- [x] Cross-Service Intelligence (Release Readiness, Release Notes Gen, Stale Branch Cleanup, Code Review Bottlenecks, Coverage/Gap Analysis, Developer Velocity, Auto Code Review)
 
 ### Phase 7: Advanced RAG & Agentic Workflows (Agentic RAG & Deep Research)
 - [x] **Agentic RAG Tools Implementation**:
@@ -77,8 +42,8 @@
     - [x] Create Langchain Tool for **Confluence API** (global search) using CQL.
     - [x] Integrate existing OpenSearch semantic chunk search as a Tool.
 - [x] **Agentic RAG Router**: Develop a smart routing agent capable of deciding which Tool(s) to call based on the user's prompt (e.g., direct API query vs semantic chunk search).
-- [ ] **Deep Research Workflow (LangGraph)**:
-    - [ ] Implement **Agent-Planner**: Capable of breaking down complex prompts into a tree of sub-tasks.
-    - [ ] Implement **Worker Agents**: Specialized agents capable of executing tasks using the Agentic RAG tools.
-    - [ ] Implement **Agent-Reviewer**: To evaluate worker outputs and initiate retry loops if the data is insufficient or incorrect.
-    - [ ] Implement robust **State Management** in LangGraph to track execution history, sub-task status, and synthesize the final report.
+- [x] **Deep Research Workflow (LangGraph)**:
+    - [x] Implement **Agent-Planner**: Capable of breaking down complex prompts into a tree of sub-tasks.
+    - [x] Implement **Worker Agents**: Specialized agents capable of executing tasks using the Agentic RAG tools.
+    - [x] Implement **Agent-Reviewer**: To evaluate worker outputs and initiate retry loops if the data is insufficient or incorrect.
+    - [x] Implement robust **State Management** in LangGraph to track execution history, sub-task status, and synthesize the final report.
