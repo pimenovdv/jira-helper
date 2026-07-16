@@ -529,6 +529,66 @@ def generate_release_notes_task():
     return "Release notes task completed"
 
 
+async def mr_summarization_task():
+    """
+    Iterates over tracked GitLab projects and fetches open Merge Requests.
+    Generates a summary of changes and suggests test recommendations via LLM,
+    and posts the output as a note on the GitLab MR (if not already posted).
+    """
+    logger.info("Starting automated MR summarization task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping MR summarization.")
+        return "MR summarization task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    summary_marker = "<!-- AUTO_GENERATED_MR_SUMMARY -->"
+
+    for project_id in tracked_projects:
+        try:
+            gitlab_client = GitLabClient()
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                try:
+                    notes = mr.notes.list(all=True)
+                    already_summarized = any(summary_marker in note.body for note in notes)
+                    if already_summarized:
+                        continue
+
+                    changes = gitlab_client.get_merge_request_changes(project_id, mr.iid)
+                    diffs = [change.get('diff', '') for change in changes.get('changes', []) if change.get('diff')]
+
+                    if not diffs:
+                        continue
+
+                    diff_text = "\n".join(diffs)
+
+                    # Prevent sending too large context to LLM
+                    if len(diff_text) > 10000:
+                        diff_text = diff_text[:10000] + "\n...[diff truncated]"
+
+                    from langchain_core.messages import HumanMessage
+                    prompt = (
+                        f"Ты - технический помощник. Пожалуйста, проанализируй следующий diff-файл Merge Request "
+                        f"и сгенерируй:\n1. Краткое резюме изменений.\n2. Рекомендации по написанию тестов.\n\n"
+                        f"Diff:\n{diff_text}"
+                    )
+
+                    response = llm.invoke([HumanMessage(content=prompt)])
+
+                    note_body = f"{summary_marker}\n\n{response.content}"
+                    gitlab_client.create_mr_note(project_id, mr.iid, note_body)
+                except Exception as e:
+                    logger.error(f"Error summarizing MR {mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing MR summarization for project {project_id}: {e}")
+
+
 async def automated_code_review_task():
     """
     Task to review code changes in all open MRs across tracked repositories,
