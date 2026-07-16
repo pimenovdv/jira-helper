@@ -29,21 +29,8 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Phase 1-6: Foundation, Ingestion, Pipeline & Completed Features
-- [x] Foundation & Architecture (uv, Docker, FastAPI structure, Dummy frontend/backend)
-- [x] Data Clients (GitLab, Jira, Confluence, Neo4j, OpenSearch) & APScheduler
-- [x] Processing & RAG Pipeline (Cross-matching, Confluence chunks, OpenSearch embeddings, LangGraph Agent RAG router, UI views)
-- [x] Cross-Service Intelligence (Release Readiness, Release Notes Gen, Stale Branch Cleanup, Code Review Bottlenecks, Coverage/Gap Analysis, Developer Velocity, Auto Code Review)
+### Phase 1-7: Foundation, Integrations & Agentic Workflows
+- [x] Architecture setup, Clients (GitLab, Jira, Confluence, Neo4j, OpenSearch), RAG Pipeline, Cross-Service features, Agentic RAG tools, Router, and Deep Research Workflow.
 
-### Phase 7: Advanced RAG & Agentic Workflows (Agentic RAG & Deep Research)
-- [x] **Agentic RAG Tools Implementation**:
-    - [x] Create Langchain Tool for **Jira API** to execute JQL queries and fetch task status/details.
-    - [x] Create Langchain Tool for **GitLab API** to search repositories, commits, and Merge Requests.
-    - [x] Create Langchain Tool for **Confluence API** (global search) using CQL.
-    - [x] Integrate existing OpenSearch semantic chunk search as a Tool.
-- [x] **Agentic RAG Router**: Develop a smart routing agent capable of deciding which Tool(s) to call based on the user's prompt (e.g., direct API query vs semantic chunk search).
-- [x] **Deep Research Workflow (LangGraph)**:
-    - [x] Implement **Agent-Planner**: Capable of breaking down complex prompts into a tree of sub-tasks.
-    - [x] Implement **Worker Agents**: Specialized agents capable of executing tasks using the Agentic RAG tools.
-    - [x] Implement **Agent-Reviewer**: To evaluate worker outputs and initiate retry loops if the data is insufficient or incorrect.
-    - [x] Implement robust **State Management** in LangGraph to track execution history, sub-task status, and synthesize the final report.
+### Phase 8: Automation and Assistant Features
+- [x] **MR Summarization & Test Generator**: Implement `mr_summarization_task` to iterate open MRs, generate a summary of changes, and suggest test recommendations via LLM, and post the output as a note on the GitLab MR.
