@@ -3,6 +3,7 @@ import logging
 from bs4 import BeautifulSoup
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.vectorstores import OpenSearchVectorSearch
 
@@ -572,7 +573,7 @@ async def mr_summarization_task():
                     if len(diff_text) > 10000:
                         diff_text = diff_text[:10000] + "\n...[diff truncated]"
 
-                    from langchain_core.messages import HumanMessage
+                    # HumanMessage imported globally
                     prompt = (
                         f"Ты - технический помощник. Пожалуйста, проанализируй следующий diff-файл Merge Request "
                         f"и сгенерируй:\n1. Краткое резюме изменений.\n2. Рекомендации по написанию тестов.\n\n"
@@ -596,10 +597,10 @@ async def automated_code_review_task():
     and submitting automated feedback via MR notes in GitLab.
     """
     logger.info("Starting automated code review task...")
-    from app.clients.gitlab_client import GitLabClient
+    # from app.clients.gitlab_client import GitLabClient (moved to global)
     from app.clients.opensearch_client import OpenSearchClient
     from app.clients import settings
-    from langchain_openai import ChatOpenAI
+    # ChatOpenAI imported globally
     from langchain_core.messages import HumanMessage, AIMessage
 
     gitlab_client = GitLabClient()
@@ -645,3 +646,74 @@ async def automated_code_review_task():
                 gitlab_client.create_mr_note(project_id, mr.iid, review_response.content)
         except Exception as e:
             logger.error(f"Error in automated code review for project {project_id}: {e}")
+
+async def stale_mr_reminder_task():
+    """
+    Iterates over tracked GitLab projects and fetches open Merge Requests.
+    Checks if an MR has been inactive for more than 7 days.
+    If so, and if no automated reminder has been sent yet, uses the LLM
+    to generate a polite nudge (in Russian) to encourage review or closure,
+    and posts it as a note on the GitLab MR.
+    """
+    # from app.clients.gitlab_client import GitLabClient (moved to global)
+    from app.clients import settings
+    # ChatOpenAI imported globally
+    # HumanMessage imported globally
+    from datetime import datetime, timezone
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated stale MR reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping stale MR reminder.")
+        return "Stale MR reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_STALE_MR_REMINDER -->"
+    now = datetime.now(timezone.utc)
+
+    for project_id in tracked_projects:
+        try:
+            gitlab_client = GitLabClient()
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                try:
+                    # Check updated_at
+                    # GitLab's updated_at format is ISO 8601, e.g. "2023-01-01T12:00:00.000Z"
+                    updated_at_str = mr.updated_at
+                    # Replace Z with +00:00 for fromisoformat compatibility in python < 3.11
+                    if updated_at_str.endswith('Z'):
+                        updated_at_str = updated_at_str[:-1] + '+00:00'
+                    updated_at = datetime.fromisoformat(updated_at_str)
+
+                    days_inactive = (now - updated_at).days
+                    if days_inactive <= 7:
+                        continue
+
+                    notes = mr.notes.list(all=True)
+                    already_reminded = any(reminder_marker in note.body for note in notes)
+                    if already_reminded:
+                        continue
+
+                    prompt = (
+                        f"Ты - вежливый технический помощник. Пожалуйста, напиши дружелюбное напоминание для команды "
+                        f"о Merge Request, который не обновлялся уже {days_inactive} дней. "
+                        f"Заголовок MR: '{mr.title}'. "
+                        f"Предложи команде посмотреть MR, провести ревью или закрыть его, если он больше не актуален. "
+                        f"Используй русский язык."
+                    )
+
+                    response = llm.invoke([HumanMessage(content=prompt)])
+
+                    note_body = f"{reminder_marker}\n\n{response.content}"
+                    gitlab_client.create_mr_note(project_id, mr.iid, note_body)
+                except Exception as e:
+                    logger.error(f"Error checking stale MR {mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing stale MR reminder for project {project_id}: {e}")
