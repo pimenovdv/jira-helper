@@ -5,7 +5,8 @@ from .tasks import (
     opensearch_ingestion_task,
     confluence_auto_link_task,
     generate_release_notes_task,
-    stale_mr_reminder_task
+    stale_mr_reminder_task,
+    stale_jira_task_reminder_task
 )
 import logging
 
@@ -31,6 +32,8 @@ def setup_scheduler():
     scheduler.add_job(generate_release_notes_task, 'cron', hour=2, minute=0, id="generate_release_notes")
 
     scheduler.add_job(stale_mr_reminder_task, 'cron', hour=3, minute=0, id="stale_mr_reminder")
+
+    scheduler.add_job(stale_jira_task_reminder_task, 'cron', hour=4, minute=0, id="stale_jira_task_reminder")
 
     logger.info("APScheduler jobs configured.")
 
