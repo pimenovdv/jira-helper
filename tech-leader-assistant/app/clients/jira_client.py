@@ -28,3 +28,15 @@ class JiraClient(BaseClient):
             return self.client.search_issues(jql, maxResults=100)
         except Exception as e:
             return []
+
+    def get_comments(self, issue_key: str):
+        try:
+            return self.client.comments(issue_key)
+        except Exception as e:
+            return []
+
+    def add_comment(self, issue_key: str, body: str):
+        try:
+            return self.client.add_comment(issue_key, body)
+        except Exception as e:
+            return None

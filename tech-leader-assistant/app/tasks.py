@@ -717,3 +717,79 @@ async def stale_mr_reminder_task():
                     logger.error(f"Error checking stale MR {mr.iid} in project {project_id}: {e}")
         except Exception as e:
             logger.error(f"Error processing stale MR reminder for project {project_id}: {e}")
+
+
+async def stale_jira_task_reminder_task():
+    """
+    Iterates over tracked Jira projects and fetches issues in progress or review.
+    Checks if an issue hasn't been updated for 7+ days.
+    If so, generates a polite nudge (in Russian) via LLM to encourage an update,
+    and posts it as a comment on the Jira issue if not already posted.
+    """
+    from app.clients import settings
+    from datetime import datetime, timezone
+    import logging
+    import dateutil.parser
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated stale Jira task reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping stale Jira task reminder.")
+        return "Stale Jira task reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    jira_projects = [p.strip() for p in jira_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_STALE_JIRA_TASK_REMINDER -->"
+    now = datetime.now(timezone.utc)
+    jira_client = JiraClient()
+
+    for project_key in jira_projects:
+        try:
+            jql = f'project = "{project_key}" AND statusCategory IN ("In Progress") AND updated <= -7d'
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                try:
+                    updated_at_str = issue.fields.updated
+                    updated_at = dateutil.parser.isoparse(updated_at_str)
+                    days_inactive = (now - updated_at).days
+
+                    if days_inactive <= 7:
+                        continue
+
+                    comments = jira_client.get_comments(issue.key)
+                    already_reminded = False
+                    for comment in comments:
+                        if reminder_marker in getattr(comment, 'body', ''):
+                            already_reminded = True
+                            break
+
+                    if already_reminded:
+                        continue
+
+                    summary = getattr(issue.fields, "summary", "")
+
+                    prompt = (
+                        f"Ты - вежливый технический помощник. Пожалуйста, напиши дружелюбное напоминание для команды "
+                        f"о задаче Jira, которая находится в работе, но не обновлялась уже {days_inactive} дней. "
+                        f"Заголовок задачи: '{summary}'. "
+                        f"Предложи команде актуализировать статус, добавить комментарий о прогрессе или закрыть задачу, если она больше не актуальна. "
+                        f"Используй русский язык."
+                    )
+
+                    response = llm.invoke([HumanMessage(content=prompt)])
+                    note_body = f"{reminder_marker}\n\n{response.content}"
+
+                    jira_client.add_comment(issue.key, note_body)
+                    logger.info(f"Posted stale reminder on Jira task {issue.key}")
+
+                except Exception as e:
+                    logger.error(f"Error checking stale Jira task {issue.key}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing stale Jira task reminder for project {project_key}: {e}")
+
+    return "Stale Jira task reminder task completed"
