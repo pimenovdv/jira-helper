@@ -99,16 +99,3 @@ class GitLabClient(BaseClient):
             return {"id": note.id, "body": note.body}
         except Exception as e:
             return None
-
-    def update_mr_labels(self, project_id: str, mr_iid: int, labels: list) -> bool:
-        """
-        Updates the labels of a specific merge request.
-        """
-        try:
-            project = self.client.projects.get(project_id)
-            mr = project.mergerequests.get(mr_iid)
-            mr.labels = labels
-            mr.save()
-            return True
-        except Exception as e:
-            return False

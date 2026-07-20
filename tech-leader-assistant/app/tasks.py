@@ -793,3 +793,64 @@ async def stale_jira_task_reminder_task():
             logger.error(f"Error processing stale Jira task reminder for project {project_key}: {e}")
 
     return "Stale Jira task reminder task completed"
+
+async def gitlab_mr_size_labeler_task():
+    """
+    Iterates over tracked GitLab projects and fetches open Merge Requests.
+    Checks if an MR already has a size label. If not, calculates the diff size
+    and assigns a size label.
+    """
+    from app.clients import settings
+
+    logger.info("Starting GitLab MR size labeler task...")
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    gitlab_client = GitLabClient()
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                try:
+                    # Check if MR already has a size label
+                    has_size_label = any(label.startswith("size:") for label in mr.labels)
+                    if has_size_label:
+                        continue
+
+                    changes = gitlab_client.get_merge_request_changes(project_id, mr.iid)
+                    if not changes:
+                        continue
+
+                    total_changes = 0
+                    for change in changes.get("changes", []):
+                        diff = change.get("diff", "")
+                        for line in diff.split("\n"):
+                            if line.startswith("+") and not line.startswith("+++"):
+                                total_changes += 1
+                            elif line.startswith("-") and not line.startswith("---"):
+                                total_changes += 1
+
+                    # Assign size based on lines changed
+                    if total_changes < 10:
+                        size = "XS"
+                    elif total_changes < 50:
+                        size = "S"
+                    elif total_changes < 250:
+                        size = "M"
+                    elif total_changes < 1000:
+                        size = "L"
+                    else:
+                        size = "XL"
+
+                    new_label = f"size: {size}"
+                    new_labels = mr.labels + [new_label]
+
+                    gitlab_client.update_mr_labels(project_id, mr.iid, new_labels)
+                    logger.info(f"Assigned label {new_label} to MR {mr.iid} in project {project_id}")
+
+                except Exception as e:
+                    logger.error(f"Error processing MR {mr.iid} in project {project_id} for size labeler: {e}")
+        except Exception as e:
+            logger.error(f"Error processing MR size labeler for project {project_id}: {e}")
