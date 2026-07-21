@@ -7,7 +7,8 @@ from .tasks import (
     generate_release_notes_task,
     stale_mr_reminder_task,
     stale_jira_task_reminder_task,
-    gitlab_mr_size_labeler_task
+    gitlab_mr_size_labeler_task,
+    gitlab_draft_labeler_task
 )
 import logging
 
@@ -37,6 +38,8 @@ def setup_scheduler():
     scheduler.add_job(stale_jira_task_reminder_task, 'cron', hour=4, minute=0, id="stale_jira_task_reminder")
 
     scheduler.add_job(gitlab_mr_size_labeler_task, 'cron', hour='*/2', minute=0, id="gitlab_mr_size_labeler")
+
+    scheduler.add_job(gitlab_draft_labeler_task, 'cron', hour='*', minute=30, id="gitlab_draft_labeler")
 
     logger.info("APScheduler jobs configured.")
 
