@@ -29,8 +29,8 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Phase 1-10: Completed Items
-- [x] Architecture setup, Clients, RAG Pipeline, Agentic Workflows, Code Review, Stale Reminders, etc.
+### Phase 1-11: Completed Items
+- [x] Architecture setup, Clients, RAG Pipeline, Agentic Workflows, Code Review, Stale Reminders, GitLab MR Automations (Size Labeler), etc.
 
-### Phase 11: GitLab MR Automations
-- [x] **Automated MR Size Labeler**: Implement `gitlab_mr_size_labeler_task` to calculate diff size of MRs and automatically apply a size label (e.g. `size: S`, `size: L`) to help reviewers prioritize work.
+### Phase 12: Repository Automations
+- [x] **Automated Draft Labeler**: Implement `gitlab_draft_labeler_task` to check MR titles for "Draft:" or "WIP:" and automatically apply a `status: draft` label, or remove it if no longer present.

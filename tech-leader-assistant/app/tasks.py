@@ -854,3 +854,44 @@ async def gitlab_mr_size_labeler_task():
                     logger.error(f"Error processing MR {mr.iid} in project {project_id} for size labeler: {e}")
         except Exception as e:
             logger.error(f"Error processing MR size labeler for project {project_id}: {e}")
+
+
+async def gitlab_draft_labeler_task():
+    """
+    Iterates over tracked GitLab projects and fetches open Merge Requests.
+    Checks if an MR title starts with 'Draft:' or 'WIP:' and assigns a 'status: draft' label.
+    If it does not start with these prefixes but has the label, it removes the label.
+    """
+    from app.clients import settings
+
+    logger.info("Starting GitLab MR draft labeler task...")
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    gitlab_client = GitLabClient()
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                try:
+                    title = getattr(mr, "title", "")
+                    labels = list(getattr(mr, "labels", []))
+
+                    is_draft_title = title.startswith("Draft:") or title.startswith("WIP:")
+                    has_draft_label = "status: draft" in labels
+
+                    if is_draft_title and not has_draft_label:
+                        labels.append("status: draft")
+                        gitlab_client.update_mr_labels(project_id, mr.iid, labels)
+                        logger.info(f"Assigned 'status: draft' label to MR {mr.iid} in project {project_id}")
+                    elif not is_draft_title and has_draft_label:
+                        labels.remove("status: draft")
+                        gitlab_client.update_mr_labels(project_id, mr.iid, labels)
+                        logger.info(f"Removed 'status: draft' label from MR {mr.iid} in project {project_id}")
+
+                except Exception as e:
+                    logger.error(f"Error processing MR {mr.iid} in project {project_id} for draft labeler: {e}")
+        except Exception as e:
+            logger.error(f"Error processing MR draft labeler for project {project_id}: {e}")
