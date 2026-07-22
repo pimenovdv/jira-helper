@@ -895,3 +895,37 @@ async def gitlab_draft_labeler_task():
                     logger.error(f"Error processing MR {mr.iid} in project {project_id} for draft labeler: {e}")
         except Exception as e:
             logger.error(f"Error processing MR draft labeler for project {project_id}: {e}")
+
+
+async def gitlab_merged_branch_cleanup_task():
+    """
+    Iterates over tracked GitLab projects and fetches branches.
+    Deletes branches that are already merged, excluding protected and default branches.
+    """
+    logger.info("Starting GitLab merged branch cleanup task...")
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    gitlab_client = GitLabClient()
+
+    for project_id in tracked_projects:
+        try:
+            branches = gitlab_client.get_project_branches(project_id)
+            for branch in branches:
+                try:
+                    name = getattr(branch, "name", "")
+                    is_merged = getattr(branch, "merged", False)
+                    is_protected = getattr(branch, "protected", False)
+                    is_default = getattr(branch, "default", False)
+
+                    if is_merged and not is_protected and not is_default:
+                        success = gitlab_client.delete_branch(project_id, name)
+                        if success:
+                            logger.info(f"Deleted merged branch '{name}' in project {project_id}")
+                        else:
+                            logger.warning(f"Failed to delete merged branch '{name}' in project {project_id}")
+                except Exception as e:
+                    logger.error(f"Error processing branch {getattr(branch, 'name', 'unknown')} in project {project_id} for cleanup: {e}")
+        except Exception as e:
+            logger.error(f"Error processing merged branch cleanup for project {project_id}: {e}")

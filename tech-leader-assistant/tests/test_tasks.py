@@ -535,3 +535,42 @@ async def test_jira_sync_task_existing_release_event_no_change(mocker):
 
     assert result == "Jira sync task completed"
     mock_session.commit.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_gitlab_merged_branch_cleanup_task(mocker):
+    # Properly mock dynaconf settings
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default='': '1' if k == 'GITLAB_TRACKED_PROJECTS' else default
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    mock_gl = mocker.patch('app.tasks.GitLabClient').return_value
+
+    mock_merged_branch = mocker.MagicMock()
+    mock_merged_branch.name = "feature-merged"
+    mock_merged_branch.merged = True
+    mock_merged_branch.protected = False
+    mock_merged_branch.default = False
+
+    mock_unmerged_branch = mocker.MagicMock()
+    mock_unmerged_branch.name = "feature-active"
+    mock_unmerged_branch.merged = False
+    mock_unmerged_branch.protected = False
+    mock_unmerged_branch.default = False
+
+    mock_protected_branch = mocker.MagicMock()
+    mock_protected_branch.name = "main"
+    mock_protected_branch.merged = True
+    mock_protected_branch.protected = True
+    mock_protected_branch.default = True
+
+    mock_gl.get_project_branches.return_value = [
+        mock_merged_branch,
+        mock_unmerged_branch,
+        mock_protected_branch
+    ]
+    mock_gl.delete_branch.return_value = True
+
+    from app.tasks import gitlab_merged_branch_cleanup_task
+    await gitlab_merged_branch_cleanup_task()
+
+    mock_gl.delete_branch.assert_called_once_with("1", "feature-merged")
