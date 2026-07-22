@@ -29,8 +29,9 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Phase 1-11: Completed Items
-- [x] Architecture setup, Clients, RAG Pipeline, Agentic Workflows, Code Review, Stale Reminders, GitLab MR Automations (Size Labeler), etc.
+### Phases 1-12: Completed Items
+- [x] Architecture setup, Clients, RAG Pipeline, Agentic Workflows, Code Review, Stale Reminders, GitLab MR Automations (Size Labeler, Draft Labeler), etc.
 
-### Phase 12: Repository Automations
-- [x] **Automated Draft Labeler**: Implement `gitlab_draft_labeler_task` to check MR titles for "Draft:" or "WIP:" and automatically apply a `status: draft` label, or remove it if no longer present.
+### Phase 13: Repository Automations
+- [x] **Merged Branch Cleanup**: Automatically delete branches that have already been merged into the default branch to maintain a clean repository.
+- [ ] **MR Jira Validator**: Check if the Jira task ID is present in the Merge Request title and automatically add a reminder comment if it is missing.
