@@ -929,3 +929,53 @@ async def gitlab_merged_branch_cleanup_task():
                     logger.error(f"Error processing branch {getattr(branch, 'name', 'unknown')} in project {project_id} for cleanup: {e}")
         except Exception as e:
             logger.error(f"Error processing merged branch cleanup for project {project_id}: {e}")
+
+
+async def gitlab_mr_jira_validator_task():
+    """
+    Iterates over tracked GitLab projects and fetches open Merge Requests.
+    Checks if the MR title contains a Jira task ID.
+    If missing, and if no automated reminder has been sent yet, posts a comment
+    (in Russian) asking to add the Jira task ID.
+    """
+    from app.clients import settings
+    import logging
+    import re
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab MR Jira validator task...")
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_MR_JIRA_VALIDATOR_REMINDER -->"
+    jira_id_pattern = re.compile(r'[A-Z]+-\d+')
+
+    for project_id in tracked_projects:
+        try:
+            gitlab_client = GitLabClient()
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                try:
+                    if jira_id_pattern.search(mr.title):
+                        continue
+
+                    # Check if we already posted a reminder
+                    notes = mr.notes.list(all=True)
+                    has_reminder = False
+                    for note in notes:
+                        if reminder_marker in note.body:
+                            has_reminder = True
+                            break
+
+                    if not has_reminder:
+                        message = f"Пожалуйста, добавьте идентификатор задачи Jira в название Merge Request.\n\n{reminder_marker}"
+                        gitlab_client.create_mr_note(project_id, mr.iid, message)
+                        logger.info(f"Added Jira validator reminder to MR !{mr.iid} in project {project_id}")
+
+                except Exception as e:
+                    logger.error(f"Error validating MR !{mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing MR Jira validator for project {project_id}: {e}")
+
+    return "MR Jira validator task completed"

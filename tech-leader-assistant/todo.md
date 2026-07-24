@@ -33,5 +33,5 @@
 - [x] Architecture setup, Clients, RAG Pipeline, Agentic Workflows, Code Review, Stale Reminders, GitLab MR Automations (Size Labeler, Draft Labeler), etc.
 
 ### Phase 13: Repository Automations
-- [x] **Merged Branch Cleanup**: Automatically delete branches that have already been merged into the default branch to maintain a clean repository.
-- [ ] **MR Jira Validator**: Check if the Jira task ID is present in the Merge Request title and automatically add a reminder comment if it is missing.
+- [x] **Merged Branch Cleanup**: Automatically delete merged branches.
+- [x] **MR Jira Validator**: Automatically add a reminder comment if Jira task ID is missing in Merge Request title.
