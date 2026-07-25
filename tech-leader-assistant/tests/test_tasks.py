@@ -574,3 +574,88 @@ async def test_gitlab_merged_branch_cleanup_task(mocker):
     await gitlab_merged_branch_cleanup_task()
 
     mock_gl.delete_branch.assert_called_once_with("1", "feature-merged")
+
+
+@pytest.mark.asyncio
+async def test_gitlab_mr_conflict_notifier_task_has_conflict(mocker):
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default='': '1' if k == 'GITLAB_TRACKED_PROJECTS' else 'test_key' if k == 'OPENAI_API_KEY' else default
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    mock_gl_client = mocker.patch('app.tasks.GitLabClient').return_value
+    mock_llm_instance = mocker.MagicMock()
+
+    class MockResponse:
+        content = "Resolve your conflicts!"
+
+    mock_llm_instance.ainvoke = mocker.AsyncMock(return_value=MockResponse())
+    mocker.patch('app.tasks.ChatOpenAI', return_value=mock_llm_instance)
+
+    mock_mr = mocker.MagicMock()
+    mock_mr.title = "Test MR"
+    mock_mr.iid = 42
+    mock_mr.has_conflicts = True
+
+    mock_note = mocker.MagicMock()
+    mock_note.body = "Just a regular note"
+    mock_mr.notes.list.return_value = [mock_note]
+
+    mock_project = mocker.MagicMock()
+    mock_project.mergerequests.list.return_value = [mock_mr]
+    mock_gl_client.client.projects.get.return_value = mock_project
+
+    from app.tasks import gitlab_mr_conflict_notifier_task
+    result = await gitlab_mr_conflict_notifier_task()
+
+    assert "completed" in result
+    mock_gl_client.create_mr_note.assert_called_once_with('1', 42, "Resolve your conflicts!")
+
+
+@pytest.mark.asyncio
+async def test_gitlab_mr_conflict_notifier_task_no_conflict(mocker):
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default='': '1' if k == 'GITLAB_TRACKED_PROJECTS' else 'test_key' if k == 'OPENAI_API_KEY' else default
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    mock_gl_client = mocker.patch('app.tasks.GitLabClient').return_value
+    mocker.patch('app.tasks.ChatOpenAI')
+
+    mock_mr = mocker.MagicMock()
+    mock_mr.has_conflicts = False
+
+    mock_project = mocker.MagicMock()
+    mock_project.mergerequests.list.return_value = [mock_mr]
+    mock_gl_client.client.projects.get.return_value = mock_project
+
+    from app.tasks import gitlab_mr_conflict_notifier_task
+    result = await gitlab_mr_conflict_notifier_task()
+
+    assert "completed" in result
+    mock_gl_client.create_mr_note.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gitlab_mr_conflict_notifier_task_already_notified(mocker):
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default='': '1' if k == 'GITLAB_TRACKED_PROJECTS' else 'test_key' if k == 'OPENAI_API_KEY' else default
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    mock_gl_client = mocker.patch('app.tasks.GitLabClient').return_value
+    mocker.patch('app.tasks.ChatOpenAI')
+
+    mock_mr = mocker.MagicMock()
+    mock_mr.has_conflicts = True
+
+    mock_note = mocker.MagicMock()
+    mock_note.body = "<!-- AUTO_GENERATED_MR_CONFLICT_NOTIFIER --> previous reminder"
+    mock_mr.notes.list.return_value = [mock_note]
+
+    mock_project = mocker.MagicMock()
+    mock_project.mergerequests.list.return_value = [mock_mr]
+    mock_gl_client.client.projects.get.return_value = mock_project
+
+    from app.tasks import gitlab_mr_conflict_notifier_task
+    result = await gitlab_mr_conflict_notifier_task()
+
+    assert "completed" in result
+    mock_gl_client.create_mr_note.assert_not_called()
