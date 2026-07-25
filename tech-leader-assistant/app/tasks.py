@@ -979,3 +979,54 @@ async def gitlab_mr_jira_validator_task():
             logger.error(f"Error processing MR Jira validator for project {project_id}: {e}")
 
     return "MR Jira validator task completed"
+
+
+async def gitlab_mr_conflict_notifier_task():
+    """
+    Iterates over open MRs for tracked projects.
+    If an MR has merge conflicts, checks if a reminder has been sent.
+    If not, generates a polite notification via LLM in Russian asking to resolve the conflicts.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab MR conflict notifier task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR conflict notifier.")
+        return "GitLab MR conflict notifier task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    gitlab_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [p.strip() for p in gitlab_projects if p.strip()]
+
+    client = GitLabClient()
+    reminder_marker = "<!-- AUTO_GENERATED_MR_CONFLICT_NOTIFIER -->"
+
+    for project_id in gitlab_projects:
+        try:
+            project = client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                if hasattr(mr, "has_conflicts") and mr.has_conflicts:
+                    mr_notes = mr.notes.list(get_all=True)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
+
+                    if not already_notified:
+                        prompt = (
+                            f"Generate a very short, polite comment in Russian to notify the author of the Merge Request "
+                            f"'{mr.title}' that their MR has merge conflicts and they need to resolve them so it can be reviewed/merged. "
+                            f"Include this exact invisible HTML marker anywhere in your response: {reminder_marker}"
+                        )
+                        response = await llm.ainvoke(prompt)
+                        comment_body = response.content
+
+                        client.create_mr_note(project_id, mr.iid, comment_body)
+                        logger.info(f"Posted MR conflict reminder to MR {mr.iid} in project {project_id}.")
+
+        except Exception as e:
+            logger.error(f"Error processing MR conflict notifier for GitLab project {project_id}: {e}")
+
+    logger.info("Finished GitLab MR conflict notifier task.")
+    return "GitLab MR conflict notifier task completed"

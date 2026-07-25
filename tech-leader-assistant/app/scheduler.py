@@ -10,7 +10,8 @@ from .tasks import (
     gitlab_mr_size_labeler_task,
     gitlab_draft_labeler_task,
     gitlab_merged_branch_cleanup_task,
-    gitlab_mr_jira_validator_task
+    gitlab_mr_jira_validator_task,
+    gitlab_mr_conflict_notifier_task
 )
 import logging
 
@@ -46,6 +47,8 @@ def setup_scheduler():
     scheduler.add_job(gitlab_merged_branch_cleanup_task, 'cron', hour=5, minute=0, id="gitlab_merged_branch_cleanup")
 
     scheduler.add_job(gitlab_mr_jira_validator_task, 'cron', hour='*', minute=45, id="gitlab_mr_jira_validator")
+
+    scheduler.add_job(gitlab_mr_conflict_notifier_task, 'interval', hours=1, id="gitlab_mr_conflict_notifier")
 
     logger.info("APScheduler jobs configured.")
 
