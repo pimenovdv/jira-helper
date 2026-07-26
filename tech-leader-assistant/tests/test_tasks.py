@@ -659,3 +659,115 @@ async def test_gitlab_mr_conflict_notifier_task_already_notified(mocker):
 
     assert "completed" in result
     mock_gl_client.create_mr_note.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_gitlab_empty_mr_description_notifier_task(mocker):
+    from app.tasks import gitlab_empty_mr_description_notifier_task
+
+    # Mock settings
+    def mock_settings_get(key, default=""):
+        if key == "GITLAB_TRACKED_PROJECTS":
+            return "1"
+        elif key == "OPENAI_API_KEY":
+            return "test_key"
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    # Mock ChatOpenAI
+    mock_llm_cls = mocker.patch('app.tasks.ChatOpenAI')
+    mock_llm = mock_llm_cls.return_value
+    mock_response = mocker.MagicMock()
+    mock_response.content = "Please add a description. <!-- AUTO_GENERATED_EMPTY_MR_DESCRIPTION_NOTIFIER -->"
+    mock_llm.ainvoke = mocker.AsyncMock(return_value=mock_response)
+
+    # Mock GitLabClient
+    mock_gitlab_client_cls = mocker.patch('app.tasks.GitLabClient')
+
+    # Notice that client instantiation within the task looks like:
+    # client = GitLabClient()
+    # project = client.client.projects.get(project_id)
+
+    mock_gitlab = mock_gitlab_client_cls.return_value
+    mock_gitlab_inner = mocker.MagicMock()
+    mock_gitlab.client = mock_gitlab_inner
+
+    # Setup project and MR
+    mock_project = mocker.MagicMock()
+    mock_gitlab_inner.projects.get.return_value = mock_project
+
+    mock_mr = mocker.MagicMock()
+    mock_mr.iid = 101
+    mock_mr.title = "Test MR"
+    mock_mr.description = "short" # less than 10 characters
+    mock_project.mergerequests.list.return_value = [mock_mr]
+
+    # MR has no existing notes
+    mock_mr.notes.list.return_value = []
+
+    # Run the task
+    result = await gitlab_empty_mr_description_notifier_task()
+
+    assert result == "GitLab empty MR description notifier task completed"
+
+    # Assert LLM was called
+    mock_llm.ainvoke.assert_called_once()
+
+    # Assert client.create_mr_note was called
+    mock_gitlab.create_mr_note.assert_called_once_with(
+        "1", 101, "Please add a description. <!-- AUTO_GENERATED_EMPTY_MR_DESCRIPTION_NOTIFIER -->"
+    )
+
+@pytest.mark.asyncio
+async def test_gitlab_empty_mr_description_notifier_task_long_description(mocker):
+    from app.tasks import gitlab_empty_mr_description_notifier_task
+
+    # Mock settings
+    def mock_settings_get(key, default=""):
+        if key == "GITLAB_TRACKED_PROJECTS":
+            return "1"
+        elif key == "OPENAI_API_KEY":
+            return "test_key"
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    # Mock ChatOpenAI
+    mock_llm_cls = mocker.patch('app.tasks.ChatOpenAI')
+    mock_llm = mock_llm_cls.return_value
+
+    # Mock GitLabClient
+    mock_gitlab_client_cls = mocker.patch('app.tasks.GitLabClient')
+
+    # Notice that client instantiation within the task looks like:
+    # client = GitLabClient()
+    # project = client.client.projects.get(project_id)
+
+    mock_gitlab = mock_gitlab_client_cls.return_value
+    mock_gitlab_inner = mocker.MagicMock()
+    mock_gitlab.client = mock_gitlab_inner
+
+    # Setup project and MR
+    mock_project = mocker.MagicMock()
+    mock_gitlab_inner.projects.get.return_value = mock_project
+
+    mock_mr = mocker.MagicMock()
+    mock_mr.iid = 101
+    mock_mr.title = "Test MR"
+    mock_mr.description = "This is a proper description that is longer than 10 characters."
+    mock_project.mergerequests.list.return_value = [mock_mr]
+
+    # Run the task
+    result = await gitlab_empty_mr_description_notifier_task()
+
+    assert result == "GitLab empty MR description notifier task completed"
+
+    # Assert LLM was NOT called
+    mock_llm.ainvoke.assert_not_called()
+
+    # Assert client.create_mr_note was NOT called
+    mock_gitlab.create_mr_note.assert_not_called()
