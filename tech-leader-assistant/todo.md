@@ -34,5 +34,5 @@
 
 ### Phase 15: New Automations
 - [x] **GitLab Empty MR Description Notifier**: Automatically add a polite reminder comment if an open MR has an empty or very short description.
-- [ ] **Jira Missing Estimation Reminder**: Automatically add a comment on Jira tasks in active sprints that lack story point estimations.
+- [x] **Jira Missing Estimation Reminder**: Automatically add a comment on Jira tasks in active sprints that lack story point estimations.
 - [ ] **GitLab Unresolved Threads Reminder**: Send a notification for MRs with discussions unresolved for more than 3 days.
