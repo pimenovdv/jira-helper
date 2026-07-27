@@ -3,7 +3,7 @@ import logging
 from bs4 import BeautifulSoup
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.vectorstores import OpenSearchVectorSearch
 
@@ -1086,3 +1086,66 @@ async def gitlab_empty_mr_description_notifier_task():
 
     logger.info("Finished GitLab empty MR description notifier task.")
     return "GitLab empty MR description notifier task completed"
+
+async def jira_missing_estimation_reminder_task():
+    """
+    Checks Jira tasks in active sprints and leaves a comment if they lack story point estimations.
+    """
+    logger.info("Running Jira missing estimation reminder task.")
+
+    openai_api_key = settings.get("OPENAI_API_KEY")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not set. Skipping missing estimation reminder task.")
+        return "Jira missing estimation reminder task skipped (no OpenAI API key)"
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    story_points_field = settings.get("JIRA_STORY_POINTS_FIELD", "customfield_10016")
+
+    llm = ChatOpenAI(temperature=0.7, model="gpt-4o-mini", api_key=openai_api_key)
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND sprint in openSprints()'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {j_proj}: {e}")
+            continue
+
+        for issue in issues:
+            # Check for estimation
+            story_points = getattr(issue.fields, story_points_field, None)
+            time_estimate = getattr(issue.fields, "timeoriginalestimate", None)
+
+            if story_points is not None or time_estimate is not None:
+                continue # Task has estimation
+
+            # Task is missing estimation
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any("<!-- AUTO_GENERATED_JIRA_MISSING_ESTIMATION_REMINDER -->" in getattr(c, "body", "") for c in comments)
+
+                if already_reminded:
+                    continue
+
+                prompt = [
+                    SystemMessage(content="You are an AI assistant helping a technical leader manage Jira tasks."),
+                    HumanMessage(content=f"Сгенерируй короткое вежливое напоминание (на русском языке) для исполнителя задачи о том, что в задаче не указана оценка (Story Points или первоначальная оценка времени). Попроси добавить оценку. Задача в активном спринте. Не используй приветствие, просто текст напоминания. Задача: {issue.key} - {issue.fields.summary}")
+                ]
+
+                response = llm.invoke(prompt)
+                comment_body = response.content.strip()
+
+                final_comment = f"<!-- AUTO_GENERATED_JIRA_MISSING_ESTIMATION_REMINDER -->\n{comment_body}"
+
+                jira_client.add_comment(issue.key, final_comment)
+                logger.info(f"Added missing estimation reminder for Jira task {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing missing estimation reminder for issue {issue.key}: {e}")
+
+    return "Jira missing estimation reminder task completed"
