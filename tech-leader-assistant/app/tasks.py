@@ -1149,3 +1149,79 @@ async def jira_missing_estimation_reminder_task():
                 logger.error(f"Error processing missing estimation reminder for issue {issue.key}: {e}")
 
     return "Jira missing estimation reminder task completed"
+
+async def gitlab_unresolved_threads_reminder_task():
+    """
+    Iterates over open MRs for tracked projects.
+    Checks for discussions (threads) that are unresolved and have not been updated for 3+ days.
+    Generates a gentle reminder via LLM (in Russian) and posts it as a reply to the thread.
+    """
+    import logging
+    from datetime import datetime, timezone
+    import dateutil.parser
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab unresolved threads reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping unresolved threads reminder.")
+        return "GitLab unresolved threads reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    gitlab_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [p.strip() for p in gitlab_projects if p.strip()]
+
+    client = GitLabClient()
+    reminder_marker = "<!-- AUTO_GENERATED_UNRESOLVED_THREAD_REMINDER -->"
+    now = datetime.now(timezone.utc)
+
+    for project_id in gitlab_projects:
+        try:
+            project = client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                try:
+                    discussions = mr.discussions.list(get_all=True)
+                    for discussion in discussions:
+                        notes = discussion.attributes.get('notes', [])
+                        if not notes:
+                            continue
+
+                        first_note = notes[0]
+                        if not first_note.get('resolvable'):
+                            continue
+
+                        is_resolved = any(n.get('resolved', False) for n in notes)
+                        if is_resolved:
+                            continue
+
+                        last_updated_str = max((n.get('updated_at') for n in notes if n.get('updated_at')), default=None)
+                        if not last_updated_str:
+                            continue
+
+                        last_updated = dateutil.parser.isoparse(last_updated_str)
+                        days_inactive = (now - last_updated).days
+
+                        if days_inactive > 3:
+                            already_reminded = any(reminder_marker in note.get('body', '') for note in notes)
+                            if not already_reminded:
+                                prompt = (
+                                    f"Generate a short, polite comment in Russian to remind the team about an unresolved discussion "
+                                    f"in the Merge Request '{mr.title}' that hasn't been updated for {days_inactive} days. "
+                                    f"Ask them to resolve it or continue the conversation. "
+                                    f"Include this exact invisible HTML marker anywhere in your response: {reminder_marker}"
+                                )
+                                response = await llm.ainvoke(prompt)
+                                discussion.notes.create({'body': response.content})
+                                logger.info(f"Added unresolved thread reminder to MR {mr.iid} in project {project_id}")
+                except Exception as e:
+                    logger.error(f"Error checking discussions for MR {mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing project {project_id} in unresolved threads reminder task: {e}")
+
+    logger.info("Finished GitLab unresolved threads reminder task.")
+    return "GitLab unresolved threads reminder task completed"
