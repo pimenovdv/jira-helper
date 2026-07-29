@@ -33,5 +33,5 @@
 - [x] Architecture setup, Clients, RAG Pipeline, Agentic Workflows, Code Review, Stale Reminders, GitLab MR Automations (Size Labeler, Draft Labeler, Merged Branch Cleanup, MR Jira Validator, MR Conflict Notifier, Empty MR Description Notifier), Jira Missing Estimation Reminder, GitLab Unresolved Threads Reminder, etc.
 
 ### Phase 16: Additional Automations
-- [ ] **GitLab MR CI/CD Failure Notifier**: Notify the author if the CI pipeline for their open MR fails.
-- [ ] **Jira Task Missing Acceptance Criteria Reminder**: Check tasks in active sprints and comment if they lack 'Acceptance Criteria'.
+- [x] **GitLab MR CI/CD Failure Notifier**: Notify the author if the CI pipeline for their open MR fails.
+- [x] **Jira Task Missing Acceptance Criteria Reminder**: Check tasks in active sprints and comment if they lack 'Acceptance Criteria'.

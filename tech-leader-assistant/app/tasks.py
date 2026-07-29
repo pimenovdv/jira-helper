@@ -1225,3 +1225,134 @@ async def gitlab_unresolved_threads_reminder_task():
 
     logger.info("Finished GitLab unresolved threads reminder task.")
     return "GitLab unresolved threads reminder task completed"
+
+async def gitlab_mr_cicd_failure_notifier_task():
+    """
+    Iterates over open MRs for tracked projects.
+    Checks if the latest CI pipeline failed and the author hasn't been notified yet.
+    Generates a polite notification via LLM in Russian to fix the CI.
+    """
+    import logging
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab MR CI/CD failure notifier task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR CI/CD failure notifier.")
+        return "GitLab MR CI/CD failure notifier task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    gitlab_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [p.strip() for p in gitlab_projects if p.strip()]
+
+    client = GitLabClient()
+
+    for project_id in gitlab_projects:
+        try:
+            project = client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                try:
+                    pipelines = mr.pipelines.list(get_all=False, per_page=1)
+                    if not pipelines:
+                        continue
+
+                    latest_pipeline = pipelines[0]
+                    if latest_pipeline.status != 'failed':
+                        continue
+
+                    reminder_marker = f"<!-- AUTO_GENERATED_CI_FAILURE_NOTIFIER_{latest_pipeline.id} -->"
+                    mr_notes = mr.notes.list(get_all=True)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
+
+                    if not already_notified:
+                        prompt = (
+                            f"Сгенерируй очень короткое, вежливое сообщение на русском языке автору Merge Request "
+                            f"с названием '{mr.title}', в котором нужно сказать, что последний CI/CD пайплайн упал (статус failed) "
+                            f"и нужно исправить ошибки, чтобы MR можно было проверить и вмержить.\n"
+                            f"Добавь этот невидимый HTML маркер где-нибудь в своем ответе: {reminder_marker}"
+                        )
+                        response = await llm.ainvoke(prompt)
+                        comment_body = response.content
+
+                        client.create_mr_note(project_id, mr.iid, comment_body)
+                        logger.info(f"Posted CI/CD failure reminder for pipeline {latest_pipeline.id} to MR {mr.iid} in project {project_id}.")
+                except Exception as e:
+                    logger.error(f"Error processing CI/CD pipeline for MR {mr.iid} in project {project_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing MR CI/CD failure notifier for GitLab project {project_id}: {e}")
+
+    logger.info("Finished GitLab MR CI/CD failure notifier task.")
+    return "GitLab MR CI/CD failure notifier task completed"
+
+
+async def jira_missing_acceptance_criteria_reminder_task():
+    """
+    Checks Jira tasks in active sprints and leaves a comment if they lack 'Acceptance Criteria'.
+    """
+    import logging
+    from langchain_core.messages import SystemMessage, HumanMessage
+    global JiraClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira missing acceptance criteria reminder task.")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not set. Skipping missing acceptance criteria reminder task.")
+        return "Jira missing acceptance criteria reminder task skipped (no OpenAI API key)"
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+
+    llm = ChatOpenAI(temperature=0.7, model="gpt-4o-mini", api_key=openai_api_key)
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_MISSING_AC_REMINDER -->"
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND sprint in openSprints()'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {j_proj}: {e}")
+            continue
+
+        for issue in issues:
+            description = getattr(issue.fields, "description", "") or ""
+            description_lower = description.lower()
+
+            if "acceptance criteria" in description_lower or "критерии приемки" in description_lower:
+                continue # Task has acceptance criteria
+
+            # Task is missing AC
+            try:
+                comments_obj = jira_client.get_comments(issue.key)
+                # Jira API might return a dict or object depending on implementation, jira package returns object with comments list
+                # Actually, jira_client.get_comments returns list of comment objects
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments_obj)
+
+                if already_reminded:
+                    continue
+
+                prompt = [
+                    SystemMessage(content="You are an AI assistant helping a technical leader manage Jira tasks."),
+                    HumanMessage(content=f"Сгенерируй короткое вежливое напоминание (на русском языке) для исполнителя задачи о том, что в описании задачи отсутствуют 'Критерии приемки' (Acceptance Criteria). Попроси их добавить, чтобы было понятно, когда задача считается выполненной. Не используй приветствие, просто текст напоминания. Задача: {issue.key} - {issue.fields.summary}.\nВ конце добавь невидимый маркер: {reminder_marker}")
+                ]
+
+                response = llm.invoke(prompt)
+                jira_client.add_comment(issue.key, response.content)
+                logger.info(f"Added missing acceptance criteria reminder to {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing missing acceptance criteria for issue {issue.key}: {e}")
+
+    logger.info("Finished Jira missing acceptance criteria reminder task.")
+    return "Jira missing acceptance criteria reminder task completed"
