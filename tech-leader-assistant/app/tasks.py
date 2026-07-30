@@ -11,10 +11,11 @@ from datetime import datetime
 from sqlalchemy import select
 from app.clients.gitlab_client import GitLabClient
 from app.clients.jira_client import JiraClient
+from app.clients import settings
 from app.clients.confluence_client import ConfluenceClient
 from app.clients.neo4j_client import Neo4jClient
 
-from app.clients import settings
+global GitLabClient, settings
 from app.database import AsyncSessionLocal
 from app.models import Event
 
@@ -599,7 +600,7 @@ async def automated_code_review_task():
     logger.info("Starting automated code review task...")
     # from app.clients.gitlab_client import GitLabClient (moved to global)
     from app.clients.opensearch_client import OpenSearchClient
-    from app.clients import settings
+
     # ChatOpenAI imported globally
     from langchain_core.messages import HumanMessage, AIMessage
 
@@ -656,7 +657,7 @@ async def stale_mr_reminder_task():
     and posts it as a note on the GitLab MR.
     """
     # from app.clients.gitlab_client import GitLabClient (moved to global)
-    from app.clients import settings
+
     # ChatOpenAI imported globally
     # HumanMessage imported globally
     from datetime import datetime, timezone
@@ -726,7 +727,7 @@ async def stale_jira_task_reminder_task():
     If so, generates a polite nudge (in Russian) via LLM to encourage an update,
     and posts it as a comment on the Jira issue if not already posted.
     """
-    from app.clients import settings
+
     from datetime import datetime, timezone
     import logging
     import dateutil.parser
@@ -800,7 +801,7 @@ async def gitlab_mr_size_labeler_task():
     Checks if an MR already has a size label. If not, calculates the diff size
     and assigns a size label.
     """
-    from app.clients import settings
+
 
     logger.info("Starting GitLab MR size labeler task...")
 
@@ -862,7 +863,7 @@ async def gitlab_draft_labeler_task():
     Checks if an MR title starts with 'Draft:' or 'WIP:' and assigns a 'status: draft' label.
     If it does not start with these prefixes but has the label, it removes the label.
     """
-    from app.clients import settings
+
 
     logger.info("Starting GitLab MR draft labeler task...")
 
@@ -938,7 +939,7 @@ async def gitlab_mr_jira_validator_task():
     If missing, and if no automated reminder has been sent yet, posts a comment
     (in Russian) asking to add the Jira task ID.
     """
-    from app.clients import settings
+
     import logging
     import re
 
@@ -1356,3 +1357,121 @@ async def jira_missing_acceptance_criteria_reminder_task():
 
     logger.info("Finished Jira missing acceptance criteria reminder task.")
     return "Jira missing acceptance criteria reminder task completed"
+
+async def gitlab_mr_too_many_comments_notifier_task():
+    """
+    Iterates over open MRs for tracked projects.
+    Checks if the number of discussions exceeds a threshold (15).
+    If so, and no automated reminder has been sent, posts a comment suggesting a synchronous meeting.
+    """
+    import logging
+
+
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab MR too many comments notifier task...")
+
+    gitlab_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [p.strip() for p in gitlab_projects if p.strip()]
+
+    threshold = 15
+    reminder_marker = "<!-- AUTO_GENERATED_TOO_MANY_COMMENTS -->"
+
+    for project_id in gitlab_projects:
+        try:
+            client = GitLabClient()
+            project = client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                try:
+                    discussions = mr.discussions.list(get_all=True)
+                    user_discussions_count = 0
+
+                    for discussion in discussions:
+                        notes = discussion.attributes.get('notes', [])
+                        if not notes:
+                            continue
+
+                        first_note = notes[0]
+                        if first_note.get('resolvable', False):
+                            user_discussions_count += 1
+
+                    if user_discussions_count > threshold:
+                        # Check if reminder already posted
+                        notes = mr.notes.list(get_all=True)
+                        already_reminded = any(reminder_marker in getattr(n, 'body', '') for n in notes)
+
+                        if not already_reminded:
+                            message = (
+                                f"В этом Merge Request накопилось уже много обсуждений ({user_discussions_count}). "
+                                f"Возможно, стоит обсудить оставшиеся вопросы на коротком созвоне?\n\n{reminder_marker}"
+                            )
+                            client.create_mr_note(project_id, mr.iid, message)
+                            logger.info(f"Added too many comments reminder to MR !{mr.iid} in project {project_id}")
+
+                except Exception as e:
+                    logger.error(f"Error checking comments for MR {mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing project {project_id} in MR too many comments notifier task: {e}")
+
+    logger.info("Finished GitLab MR too many comments notifier task.")
+    return "GitLab MR too many comments notifier task completed"
+
+async def jira_overdue_task_reminder_task():
+    """
+    Checks Jira tasks in active sprints and leaves a comment if they are overdue.
+    """
+    import logging
+    from datetime import datetime, timezone
+    import dateutil.parser
+
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira overdue task reminder task.")
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    reminder_marker = "<!-- AUTO_GENERATED_OVERDUE_REMINDER -->"
+    now = datetime.now(timezone.utc)
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND sprint in openSprints()'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {j_proj}: {e}")
+            continue
+
+        for issue in issues:
+            try:
+                due_date_str = getattr(issue.fields, "duedate", None)
+                if not due_date_str:
+                    continue
+
+                due_date = dateutil.parser.isoparse(due_date_str)
+                # Ensure timezone aware
+                if due_date.tzinfo is None:
+                    due_date = due_date.replace(tzinfo=timezone.utc)
+
+                if due_date < now:
+                    comments = jira_client.get_comments(issue.key)
+                    already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                    if not already_reminded:
+                        message = (
+                            f"Срок выполнения этой задачи прошел ({due_date_str}). "
+                            f"Пожалуйста, актуализируйте статус задачи или измените срок выполнения.\n\n{reminder_marker}"
+                        )
+                        jira_client.add_comment(issue.key, message)
+                        logger.info(f"Added overdue reminder to Jira task {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing overdue reminder for issue {issue.key}: {e}")
+
+    logger.info("Finished Jira overdue task reminder task.")
+    return "Jira overdue task reminder task completed"
