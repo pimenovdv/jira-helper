@@ -16,7 +16,9 @@ from .tasks import (
     jira_missing_estimation_reminder_task,
     gitlab_unresolved_threads_reminder_task,
     gitlab_mr_cicd_failure_notifier_task,
-    jira_missing_acceptance_criteria_reminder_task
+    jira_missing_acceptance_criteria_reminder_task,
+    gitlab_mr_too_many_comments_notifier_task,
+    jira_overdue_task_reminder_task
 )
 import logging
 
@@ -64,6 +66,9 @@ def setup_scheduler():
     scheduler.add_job(gitlab_mr_cicd_failure_notifier_task, 'interval', minutes=30, id="gitlab_mr_cicd_failure_notifier")
 
     scheduler.add_job(jira_missing_acceptance_criteria_reminder_task, 'cron', hour=8, minute=0, id="jira_missing_acceptance_criteria_reminder")
+
+    scheduler.add_job(gitlab_mr_too_many_comments_notifier_task, 'cron', hour='*/6', minute=45, id="gitlab_mr_too_many_comments_notifier")
+    scheduler.add_job(jira_overdue_task_reminder_task, 'cron', hour=9, minute=0, id="jira_overdue_task_reminder")
 
     logger.info("APScheduler jobs configured.")
 
