@@ -11,11 +11,11 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Phases 1-16: Completed Items
-- [x] Architecture setup, Clients, RAG Pipeline, Agentic Workflows, Code Review, Stale Reminders, GitLab MR Automations (Size Labeler, Draft Labeler, Merged Branch Cleanup, MR Jira Validator, MR Conflict Notifier, Empty MR Description Notifier), Jira Missing Estimation Reminder, GitLab Unresolved Threads Reminder.
-- [x] GitLab MR CI/CD Failure Notifier.
-- [x] Jira Task Missing Acceptance Criteria Reminder.
+### Completed Phases (1-17)
+- [x] Initial setup (Clients, RAG Pipeline, Agentic Workflows).
+- [x] GitLab Automations (Code Review, Stale Reminders, Size/Draft Labels, Branch Cleanup, Jira Validator, Conflict/Empty MR/CI Failure/Too Many Comments Notifiers).
+- [x] Jira Automations (Missing Estimation/Acceptance Criteria/Overdue/Stale Task Reminders).
 
-### Phase 17: Additional Automations
-- [x] **GitLab MR Too Many Comments Notifier**: Notify the author or team if an MR has too many unresolved/resolved discussions (e.g., > 15), suggesting a synchronous meeting.
-- [x] **Jira Overdue Task Reminder**: Check tasks in active sprints and comment if their due date is in the past.
+### Phase 18: Quality & Best Practices Automations
+- [x] **GitLab MR Missing Tests Notifier**: Notify the author if an MR has significant code changes but no modifications to test files.
+- [x] **Jira Task Missing Description Reminder**: Notify the assignee/reporter if a task lacks a meaningful description.

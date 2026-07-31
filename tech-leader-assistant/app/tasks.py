@@ -1475,3 +1475,138 @@ async def jira_overdue_task_reminder_task():
 
     logger.info("Finished Jira overdue task reminder task.")
     return "Jira overdue task reminder task completed"
+
+
+async def gitlab_mr_missing_tests_notifier_task():
+    """
+    Checks open Merge Requests for modified source files without corresponding modifications to test files.
+    If tests are missing, uses an LLM to generate a polite notification (in Russian) and posts it.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR missing tests notifier task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR missing tests notifier.")
+        return "GitLab MR missing tests notifier task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_MR_MISSING_TESTS_NOTIFIER -->"
+    gitlab_client = GitLabClient()
+
+    for project_id in tracked_projects:
+        logger.info(f"Checking missing tests for MRs in project {project_id}")
+        mrs = gitlab_client.get_merge_requests(project_id, state="opened")
+
+        # We need the specific MR object to fetch changes
+        try:
+            gl_project = gitlab_client.client.projects.get(project_id)
+        except Exception as e:
+            logger.error(f"Could not fetch project {project_id}: {e}")
+            continue
+
+        for mr in mrs:
+            try:
+                full_mr = gl_project.mergerequests.get(mr.iid)
+                changes = full_mr.changes()
+
+                has_source_changes = False
+                has_test_changes = False
+
+                for change in changes.get("changes", []):
+                    new_path = change.get("new_path", "")
+                    # Simple heuristic for test files vs source files
+                    is_test_file = "test" in new_path.lower() or new_path.startswith("tests/")
+                    is_source_file = new_path.endswith((".py", ".js", ".ts", ".go", ".java", ".cpp", ".c", ".cs"))
+
+                    if is_test_file:
+                        has_test_changes = True
+                    elif is_source_file:
+                        has_source_changes = True
+
+                if has_source_changes and not has_test_changes:
+                    # Check if we already reminded
+                    notes = full_mr.notes.list(all=True)
+                    already_notified = any(reminder_marker in getattr(n, "body", "") for n in notes)
+
+                    if not already_notified:
+                        prompt = (
+                            "Вы — технический лидер. Напишите очень короткое, вежливое сообщение "
+                            "автору Merge Request, обратив внимание на то, что в MR есть изменения исходного кода, "
+                            "но нет изменений в файлах тестов. Предложите добавить тесты для нового кода или "
+                            "обновить существующие. Сообщение должно быть на русском языке."
+                        )
+                        response = llm.invoke([HumanMessage(content=prompt)])
+                        message_body = f"{response.content}\n\n{reminder_marker}"
+
+                        gitlab_client.create_mr_note(project_id, mr.iid, message_body)
+                        logger.info(f"Added missing tests notification to MR !{mr.iid} in project {project_id}")
+
+            except Exception as e:
+                logger.error(f"Error checking tests for MR !{mr.iid} in project {project_id}: {e}")
+
+    logger.info("Finished GitLab MR missing tests notifier task.")
+    return "GitLab MR missing tests notifier task completed"
+
+
+async def jira_missing_description_reminder_task():
+    """
+    Checks non-closed Jira issues. If the description is empty or very short,
+    generates a polite reminder asking the reporter/assignee to provide a detailed description.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira missing description reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira missing description reminder.")
+        return "Jira missing description reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_MISSING_DESCRIPTION_REMINDER -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND statusCategory != Done'
+        issues = jira_client.search_issues(jql)
+        logger.info(f"Found {len(issues)} active issues in project {project_key} to check for descriptions")
+
+        for issue in issues:
+            try:
+                description = getattr(issue.fields, "description", None)
+
+                # Check if description is missing or very short
+                if not description or len(description.strip()) < 20:
+                    comments = jira_client.get_comments(issue.key)
+                    already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                    if not already_reminded:
+                        prompt = (
+                            "Вы — технический лидер (Tech Lead). "
+                            "Напишите короткое, вежливое сообщение автору или исполнителю задачи в Jira, "
+                            "указав, что описание задачи пустое или слишком короткое. "
+                            "Попросите добавить подробное описание, чтобы всем был понятен контекст задачи. "
+                            "Сообщение должно быть на русском языке."
+                        )
+                        response = llm.invoke([HumanMessage(content=prompt)])
+                        message = f"{response.content}\n\n{reminder_marker}"
+
+                        jira_client.add_comment(issue.key, message)
+                        logger.info(f"Added missing description reminder to Jira task {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing missing description for issue {issue.key}: {e}")
+
+    logger.info("Finished Jira missing description reminder task.")
+    return "Jira missing description reminder task completed"
