@@ -16,6 +16,8 @@
 - [x] GitLab Automations (Code Review, Stale Reminders, Size/Draft Labels, Branch Cleanup, Jira Validator, Conflict/Empty MR/CI Failure/Too Many Comments/Missing Tests Notifiers).
 - [x] Jira Automations (Missing Estimation/Acceptance Criteria/Overdue/Stale Task/Missing Description Reminders).
 
-### Phase 19: Workflow & Assignment Automations
-- [x] **GitLab MR Missing Reviewer Notifier**: Notify the author if an MR is ready (not Draft) but has no reviewers assigned.
-- [ ] **Jira Sprint Unassigned Task Reminder**: Notify the team if a task in an active sprint is not assigned to anyone.
+### Completed Phases (19)
+- [x] Workflow & Assignment Automations (GitLab MR Missing Reviewer Notifier, Jira Sprint Unassigned Task Reminder).
+
+### Phase 20: Reporting & Analytics
+- [ ] **Weekly Sprint Summary Generation**: Automatically generate and post a summary of the current sprint's progress (completed vs pending tasks) to a designated Confluence page.
