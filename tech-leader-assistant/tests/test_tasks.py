@@ -590,6 +590,7 @@ async def test_gitlab_mr_conflict_notifier_task_has_conflict(mocker):
     mock_llm_instance.ainvoke = mocker.AsyncMock(return_value=MockResponse())
     mocker.patch('app.tasks.ChatOpenAI', return_value=mock_llm_instance)
 
+
     mock_mr = mocker.MagicMock()
     mock_mr.title = "Test MR"
     mock_mr.iid = 42
@@ -832,7 +833,7 @@ async def test_gitlab_unresolved_threads_reminder_task(mocker, mock_settings):
 
     await gitlab_unresolved_threads_reminder_task()
     mock_discussion.notes.create.assert_not_called()
-    mock_llm_instance.ainvoke.assert_not_called()
+    mock_llm_instance.invoke.assert_not_called()
 
 @pytest.fixture
 def mock_settings(mocker):
@@ -895,7 +896,7 @@ async def test_gitlab_unresolved_threads_reminder_task(mocker, mock_settings):
 
     await gitlab_unresolved_threads_reminder_task()
     mock_discussion.notes.create.assert_not_called()
-    mock_llm_instance.ainvoke.assert_not_called()
+    mock_llm_instance.invoke.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -918,6 +919,7 @@ async def test_gitlab_unresolved_threads_reminder_task(mocker):
     mock_response.content = "Reminder comment"
     mock_llm_instance.ainvoke = mocker.AsyncMock(return_value=mock_response)
     mocker.patch('app.tasks.ChatOpenAI', return_value=mock_llm_instance)
+
 
     # Mock GitLab
     mock_gitlab_client_class = mocker.patch('app.tasks.GitLabClient')
@@ -964,4 +966,82 @@ async def test_gitlab_unresolved_threads_reminder_task(mocker):
 
     await gitlab_unresolved_threads_reminder_task()
     mock_discussion.notes.create.assert_not_called()
-    mock_llm_instance.ainvoke.assert_not_called()
+    mock_llm_instance.invoke.assert_not_called()
+import pytest
+from app.tasks import jira_sprint_unassigned_task_reminder_task
+
+@pytest.mark.asyncio
+async def test_jira_sprint_unassigned_task_reminder(mocker):
+    # Mock settings to return a test project and dummy API key
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default="": "PROJ" if k == "JIRA_TRACKED_PROJECTS" else ("dummy_key" if k == "OPENAI_API_KEY" else default)
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    # Mock LLM
+    mock_llm_instance = mocker.MagicMock()
+    mock_llm_response = mocker.MagicMock()
+    mock_llm_response.content = "Please assign this task."
+    mock_llm_instance.invoke.return_value = mock_llm_response
+    mocker.patch('app.tasks.ChatOpenAI', return_value=mock_llm_instance)
+
+
+    # Mock JiraClient class completely to avoid actual initialization
+    mock_jira_client_cls = mocker.patch('app.tasks.JiraClient')
+    mock_jira_client = mock_jira_client_cls.return_value
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "PROJ-123"
+    mock_jira_client.search_issues.return_value = [mock_issue]
+
+    # No existing comments
+    mock_jira_client.get_comments.return_value = []
+
+    result = await jira_sprint_unassigned_task_reminder_task()
+
+    assert result == "Jira sprint unassigned task reminder task completed"
+    mock_jira_client.search_issues.assert_any_call('project = "PROJ" AND sprint in openSprints() AND assignee IS EMPTY AND statusCategory != Done')
+    mock_llm_instance.invoke.assert_called_once()
+    mock_jira_client.add_comment.assert_called_once()
+    assert "Please assign this task." in mock_jira_client.add_comment.call_args[0][1]
+    assert "<!-- AUTO_GENERATED_JIRA_SPRINT_UNASSIGNED_TASK_REMINDER -->" in mock_jira_client.add_comment.call_args[0][1]
+
+
+@pytest.mark.asyncio
+async def test_jira_sprint_unassigned_task_reminder_already_notified(mocker):
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default="": "PROJ" if k == "JIRA_TRACKED_PROJECTS" else ("dummy_key" if k == "OPENAI_API_KEY" else default)
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    mock_llm_instance = mocker.MagicMock()
+    mocker.patch('app.tasks.ChatOpenAI', return_value=mock_llm_instance)
+
+
+    mock_jira_client_cls = mocker.patch('app.tasks.JiraClient')
+    mock_jira_client = mock_jira_client_cls.return_value
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "PROJ-123"
+    mock_jira_client.search_issues.return_value = [mock_issue]
+
+    # Existing comment with the marker
+    mock_comment = mocker.MagicMock()
+    mock_comment.body = "Some comment\n<!-- AUTO_GENERATED_JIRA_SPRINT_UNASSIGNED_TASK_REMINDER -->"
+    mock_jira_client.get_comments.return_value = [mock_comment]
+
+    result = await jira_sprint_unassigned_task_reminder_task()
+
+    assert result == "Jira sprint unassigned task reminder task completed"
+    mock_llm_instance.invoke.assert_not_called()
+    mock_jira_client.add_comment.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_jira_sprint_unassigned_task_reminder_no_api_key(mocker):
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default="": "PROJ" if k == "JIRA_TRACKED_PROJECTS" else ("" if k == "OPENAI_API_KEY" else default)
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    mock_jira_client_cls = mocker.patch('app.tasks.JiraClient')
+
+    result = await jira_sprint_unassigned_task_reminder_task()
+
+    assert result == "Jira sprint unassigned task reminder task skipped (no OpenAI API key)"
+    mock_jira_client_cls.assert_not_called()

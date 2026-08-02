@@ -1662,3 +1662,57 @@ async def gitlab_mr_missing_reviewer_notifier_task():
                     logger.info(f"Added missing reviewer reminder to MR {mr.iid} in project {project_id}")
         except Exception as e:
             logger.error(f"Error processing project {project_id} in missing reviewer notifier task: {e}")
+
+async def jira_sprint_unassigned_task_reminder_task():
+    """
+    Checks Jira tasks in active sprints that are not assigned to anyone,
+    and posts a comment asking the team to assign the task.
+    """
+    import logging
+
+    global JiraClient, ChatOpenAI, settings, HumanMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira sprint unassigned task reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira sprint unassigned task reminder.")
+        return "Jira sprint unassigned task reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_SPRINT_UNASSIGNED_TASK_REMINDER -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND sprint in openSprints() AND assignee IS EMPTY AND statusCategory != Done'
+        issues = jira_client.search_issues(jql)
+        logger.info(f"Found {len(issues)} unassigned active issues in open sprints in project {project_key}")
+
+        for issue in issues:
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if not already_reminded:
+                    prompt = (
+                        "Вы — технический лидер (Tech Lead). "
+                        "Напишите короткое, вежливое сообщение команде в комментариях задачи Jira, "
+                        "которая находится в активном спринте, но на данный момент ни на кого не назначена. "
+                        "Попросите кого-нибудь взять задачу в работу или назначить ответственного, "
+                        "чтобы она не потерялась. Сообщение должно быть на русском языке."
+                    )
+                    response = llm.invoke([HumanMessage(content=prompt)])
+                    message = f"{response.content}\n\n{reminder_marker}"
+
+                    jira_client.add_comment(issue.key, message)
+                    logger.info(f"Added unassigned task reminder to Jira task {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing unassigned task reminder for issue {issue.key}: {e}")
+
+    logger.info("Finished Jira sprint unassigned task reminder task.")
+    return "Jira sprint unassigned task reminder task completed"
