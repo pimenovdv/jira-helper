@@ -22,7 +22,8 @@ from .tasks import (
     gitlab_mr_missing_tests_notifier_task,
     jira_missing_description_reminder_task,
     gitlab_mr_missing_reviewer_notifier_task,
-    jira_sprint_unassigned_task_reminder_task
+    jira_sprint_unassigned_task_reminder_task,
+    jira_weekly_sprint_summary_task
 )
 import logging
 
@@ -77,6 +78,7 @@ def setup_scheduler():
     scheduler.add_job(jira_missing_description_reminder_task, 'cron', hour='*/4', minute=30, id="jira_missing_description_reminder")
     scheduler.add_job(gitlab_mr_missing_reviewer_notifier_task, 'cron', hour='*/3', minute=0, id="gitlab_mr_missing_reviewer_notifier")
     scheduler.add_job(jira_sprint_unassigned_task_reminder_task, 'cron', hour='*/4', minute=0, id="jira_sprint_unassigned_task_reminder")
+    scheduler.add_job(jira_weekly_sprint_summary_task, 'cron', day_of_week='fri', hour=17, minute=0, id="jira_weekly_sprint_summary")
 
     logger.info("APScheduler jobs configured.")
 

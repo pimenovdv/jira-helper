@@ -20,4 +20,4 @@
 - [x] Workflow & Assignment Automations (GitLab MR Missing Reviewer Notifier, Jira Sprint Unassigned Task Reminder).
 
 ### Phase 20: Reporting & Analytics
-- [ ] **Weekly Sprint Summary Generation**: Automatically generate and post a summary of the current sprint's progress (completed vs pending tasks) to a designated Confluence page.
+- [x] **Weekly Sprint Summary Generation**: Automatically generate and post a summary of the current sprint's progress (completed vs pending tasks) to a designated Confluence page.
