@@ -1663,6 +1663,95 @@ async def gitlab_mr_missing_reviewer_notifier_task():
         except Exception as e:
             logger.error(f"Error processing project {project_id} in missing reviewer notifier task: {e}")
 
+async def jira_weekly_sprint_summary_task():
+    """
+    Fetches Jira tasks for active sprints, categorizes them by completion status,
+    generates a summary using LLM in Russian, and posts it to Confluence.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Jira weekly sprint summary task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping weekly sprint summary.")
+        return "Jira weekly sprint summary task skipped (no OpenAI API key)"
+
+    confluence_space = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+    if not confluence_space or not confluence_space[0].strip():
+        logger.warning("No confluence spaces tracked for sprint summary.")
+        return "Jira weekly sprint summary task skipped (no spaces)"
+
+    space = confluence_space[0].strip()
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    confluence_client = ConfluenceClient()
+
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND sprint in openSprints()'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching active sprint issues for project {project_key}: {e}")
+            continue
+
+        if not issues:
+            logger.info(f"No active sprint issues found for project {project_key}")
+            continue
+
+        completed_tasks = []
+        pending_tasks = []
+
+        for issue in issues:
+            summary = getattr(issue.fields, "summary", "")
+            status = getattr(issue.fields.status, "name", "")
+            status_category = getattr(issue.fields.status.statusCategory, "name", "")
+
+            task_info = f"- [{issue.key}] {summary} (Статус: {status})"
+
+            if status_category == "Done":
+                completed_tasks.append(task_info)
+            else:
+                pending_tasks.append(task_info)
+
+        prompt_text = (
+            f"Ты — технический лидер. Подготовь еженедельный отчет по текущему спринту для проекта {project_key}.\n\n"
+            f"Выполненные задачи:\n{chr(10).join(completed_tasks) if completed_tasks else 'Нет выполненных задач'}\n\n"
+            f"Задачи в работе (ожидающие завершения):\n{chr(10).join(pending_tasks) if pending_tasks else 'Нет задач в работе'}\n\n"
+            "Сгенерируй отчет в формате HTML, который можно напрямую вставить на страницу Confluence (без тегов `<html>`, `<body>`, или markdown блоков вроде ```html). "
+            "Отчет должен быть структурированным, легко читаемым, на русском языке. Можешь добавить краткое ободряющее слово для команды в начале или в конце."
+        )
+
+        try:
+            from langchain_core.messages import HumanMessage
+            response = llm.invoke([HumanMessage(content=prompt_text)])
+            html_content = response.content
+
+            if html_content.startswith("```html"):
+                html_content = html_content[7:]
+            if html_content.endswith("```"):
+                html_content = html_content[:-3]
+
+            title = f"Еженедельный отчет по спринту: {project_key}"
+
+            confluence_client.client.create_page(
+                space=space,
+                title=title,
+                body=html_content.strip(),
+                parent_id=None
+            )
+            logger.info(f"Published sprint summary for {project_key} to space {space}.")
+        except Exception as e:
+            logger.error(f"Error generating or publishing sprint summary for project {project_key}: {e}")
+
+    logger.info("Finished Jira weekly sprint summary task.")
+    return "Jira weekly sprint summary task completed"
+
 async def jira_sprint_unassigned_task_reminder_task():
     """
     Checks Jira tasks in active sprints that are not assigned to anyone,
