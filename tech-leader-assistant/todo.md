@@ -11,13 +11,8 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-18)
-- [x] Initial setup (Clients, RAG Pipeline, Agentic Workflows).
-- [x] GitLab Automations (Code Review, Stale Reminders, Size/Draft Labels, Branch Cleanup, Jira Validator, Conflict/Empty MR/CI Failure/Too Many Comments/Missing Tests Notifiers).
-- [x] Jira Automations (Missing Estimation/Acceptance Criteria/Overdue/Stale Task/Missing Description Reminders).
+### Completed Phases (1-20)
+- [x] Setup, Agentic Workflows, GitLab/Jira Automations, Reminders, and Reporting/Analytics.
 
-### Completed Phases (19)
-- [x] Workflow & Assignment Automations (GitLab MR Missing Reviewer Notifier, Jira Sprint Unassigned Task Reminder).
-
-### Phase 20: Reporting & Analytics
-- [x] **Weekly Sprint Summary Generation**: Automatically generate and post a summary of the current sprint's progress (completed vs pending tasks) to a designated Confluence page.
+### Phase 21: GitLab Automations - MR Title Linter
+- [x] **GitLab MR Title Linter Task**: Automatically check GitLab Merge Request titles and enforce standard naming conventions. Post a polite, LLM-generated reminder (in Russian) if the title does not meet the standards (e.g., missing Conventional Commits prefix or Jira ticket ID).
