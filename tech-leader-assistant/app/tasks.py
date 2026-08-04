@@ -1805,3 +1805,76 @@ async def jira_sprint_unassigned_task_reminder_task():
 
     logger.info("Finished Jira sprint unassigned task reminder task.")
     return "Jira sprint unassigned task reminder task completed"
+
+async def gitlab_mr_title_linter_task():
+    """
+    Checks GitLab Merge Request titles for compliance with standard conventions
+    (e.g., Conventional Commits or Jira ticket prefixes).
+    If a title is non-compliant, uses the LLM to generate a polite reminder in Russian
+    and posts it to the MR, avoiding duplicate comments via a hidden marker.
+    """
+    import logging
+    import re
+
+    global GitLabClient, ChatOpenAI, settings, HumanMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR title linter task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping MR title linter.")
+        return "MR title linter task skipped (no OpenAI API key)"
+
+    marker = "<!-- AUTO_GENERATED_MR_TITLE_LINTER_REMINDER -->"
+    gitlab_client = GitLabClient()
+    llm = ChatOpenAI(temperature=0.7, model="gpt-4o-mini", api_key=openai_api_key)
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+
+    # Regex for Conventional Commits or Jira ID prefix
+    # e.g., "feat(ui): ...", "fix: ...", "TLA-123 Fix ..."
+    pattern = r"^(feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert)(\([a-zA-Z0-9_-]+\))?: .+|^[A-Z]+-[0-9]+ .+"
+
+    for project_id in tracked_projects:
+        project_id = project_id.strip()
+        if not project_id:
+            continue
+
+        try:
+            mrs = gitlab_client.get_open_merge_requests(project_id)
+            for mr in mrs:
+                title = mr.title
+
+                # Exclude drafts from strict title linting to be flexible, but optional.
+                if mr.draft or title.lower().startswith("draft:"):
+                    continue
+
+                if re.match(pattern, title):
+                    continue
+
+                try:
+                    notes = gitlab_client.get_mr_notes(project_id, mr.iid)
+                    already_reminded = any(marker in (note.body or "") for note in notes)
+
+                    if not already_reminded:
+                        prompt = (
+                            f"Вы — технический лидер (Tech Lead). Название Merge Request '{title}' "
+                            f"не соответствует принятым стандартам именования (Conventional Commits или префикс задачи Jira, например 'TLA-123 ...'). "
+                            f"Напишите короткое, вежливое сообщение автору, попросив его привести название к стандарту. "
+                            f"Приведите пару примеров правильных названий (например, 'feat(auth): добавлена авторизация' или 'TLA-123 Исправление ошибки авторизации'). "
+                            f"Сообщение должно быть на русском языке."
+                        )
+                        response = llm.invoke([HumanMessage(content=prompt)])
+                        message = f"{response.content}\n\n{marker}"
+
+                        gitlab_client.create_mr_note(project_id, mr.iid, message)
+                        logger.info(f"Posted title linter reminder on MR {mr.iid} in project {project_id}")
+                except Exception as e:
+                    logger.error(f"Error processing MR {mr.iid} in project {project_id} for title linter: {e}")
+
+        except Exception as e:
+            logger.error(f"Error fetching MRs for project {project_id} in title linter: {e}")
+
+    logger.info("Finished automated GitLab MR title linter task.")
+    return "GitLab MR title linter task completed"
