@@ -1759,8 +1759,6 @@ async def jira_sprint_unassigned_task_reminder_task():
     """
     import logging
 
-    global JiraClient, ChatOpenAI, settings, HumanMessage
-
     logger = logging.getLogger(__name__)
     logger.info("Starting automated Jira sprint unassigned task reminder task...")
 
@@ -1878,3 +1876,55 @@ async def gitlab_mr_title_linter_task():
 
     logger.info("Finished automated GitLab MR title linter task.")
     return "GitLab MR title linter task completed"
+
+async def jira_missing_component_reminder_task():
+    """
+    Checks Jira tasks in active sprints that do not have an assigned component,
+    and posts a comment asking the author to assign one.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira missing component reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira missing component reminder.")
+        return "Jira missing component reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_MISSING_COMPONENT_REMINDER -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND sprint in openSprints() AND components IS EMPTY AND statusCategory != Done'
+        issues = jira_client.search_issues(jql)
+        logger.info(f"Found {len(issues)} issues missing components in open sprints in project {project_key}")
+
+        for issue in issues:
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if not already_reminded:
+                    prompt = (
+                        "Вы — технический лидер (Tech Lead). "
+                        "Напишите короткое, вежливое сообщение автору задачи Jira, "
+                        "которая находится в активном спринте, но не имеет назначенного компонента. "
+                        "Попросите добавить компонент (component), чтобы задача была правильно классифицирована. "
+                        "Сообщение должно быть на русском языке."
+                    )
+                    response = llm.invoke([HumanMessage(content=prompt)])
+                    message = f"{response.content}\n\n{reminder_marker}"
+
+                    jira_client.add_comment(issue.key, message)
+                    logger.info(f"Added missing component reminder to Jira task {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing missing component reminder for issue {issue.key}: {e}")
+
+    logger.info("Finished Jira missing component reminder task.")
+    return "Jira missing component reminder task completed"

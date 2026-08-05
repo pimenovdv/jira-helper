@@ -11,8 +11,8 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-20)
-- [x] Setup, Agentic Workflows, GitLab/Jira Automations, Reminders, and Reporting/Analytics.
+### Completed Phases (1-21)
+- [x] Setup, Agentic Workflows, GitLab/Jira Automations, Reminders, Reporting/Analytics, and MR Title Linter.
 
-### Phase 21: GitLab Automations - MR Title Linter
-- [x] **GitLab MR Title Linter Task**: Automatically check GitLab Merge Request titles and enforce standard naming conventions. Post a polite, LLM-generated reminder (in Russian) if the title does not meet the standards (e.g., missing Conventional Commits prefix or Jira ticket ID).
+### Phase 22: Jira Automations - Missing Component Reminder
+- [x] **Jira Missing Component Reminder Task**: Automatically check active Jira tasks to ensure they have an assigned component. Post a polite, LLM-generated reminder (in Russian) on tasks without components.
