@@ -1928,3 +1928,55 @@ async def jira_missing_component_reminder_task():
 
     logger.info("Finished Jira missing component reminder task.")
     return "Jira missing component reminder task completed"
+
+async def jira_missing_fixversion_reminder_task():
+    """
+    Checks Jira tasks that are completed/resolved but do not have an assigned fixVersion,
+    and posts a comment asking the author to assign one.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira missing fixVersion reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira missing fixVersion reminder.")
+        return "Jira missing fixVersion reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_MISSING_FIXVERSION_REMINDER -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND statusCategory = Done AND fixVersion is EMPTY'
+        issues = jira_client.search_issues(jql)
+        logger.info(f"Found {len(issues)} completed issues missing fixVersion in project {project_key}")
+
+        for issue in issues:
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if not already_reminded:
+                    prompt = (
+                        "Вы — технический лидер (Tech Lead). "
+                        "Напишите короткое, вежливое сообщение автору выполненной (Done/Resolved) задачи Jira, "
+                        "у которой не проставлен релиз (fixVersion). "
+                        "Попросите добавить fixVersion, чтобы задача попала в список изменений (release notes). "
+                        "Сообщение должно быть на русском языке."
+                    )
+                    response = llm.invoke([HumanMessage(content=prompt)])
+                    message = f"{response.content}\n\n{reminder_marker}"
+
+                    jira_client.add_comment(issue.key, message)
+                    logger.info(f"Added missing fixVersion reminder to Jira task {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing missing fixVersion reminder for issue {issue.key}: {e}")
+
+    logger.info("Finished Jira missing fixVersion reminder task.")
+    return "Jira missing fixVersion reminder task completed"

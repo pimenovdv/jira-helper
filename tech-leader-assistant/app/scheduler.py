@@ -25,7 +25,8 @@ from .tasks import (
     jira_sprint_unassigned_task_reminder_task,
     jira_weekly_sprint_summary_task,
     gitlab_mr_title_linter_task,
-    jira_missing_component_reminder_task
+    jira_missing_component_reminder_task,
+    jira_missing_fixversion_reminder_task
 )
 import logging
 
@@ -83,6 +84,7 @@ def setup_scheduler():
     scheduler.add_job(jira_weekly_sprint_summary_task, 'cron', day_of_week='fri', hour=17, minute=0, id="jira_weekly_sprint_summary")
     scheduler.add_job(gitlab_mr_title_linter_task, 'cron', hour='*/4', minute=0, id="gitlab_mr_title_linter")
     scheduler.add_job(jira_missing_component_reminder_task, 'cron', hour='*/4', minute=15, id="jira_missing_component_reminder")
+    scheduler.add_job(jira_missing_fixversion_reminder_task, 'cron', hour=10, minute=0, id="jira_missing_fixversion_reminder")
 
     logger.info("APScheduler jobs configured.")
 
