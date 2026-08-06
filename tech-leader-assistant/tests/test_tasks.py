@@ -1045,3 +1045,69 @@ async def test_jira_sprint_unassigned_task_reminder_no_api_key(mocker):
 
     assert result == "Jira sprint unassigned task reminder task skipped (no OpenAI API key)"
     mock_jira_client_cls.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_jira_missing_fixversion_reminder_task(mocker):
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default="": "TLA" if k == "JIRA_TRACKED_PROJECTS" else ("fake_key" if k == "OPENAI_API_KEY" else default)
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    mock_llm_instance = mocker.MagicMock()
+    mock_llm_response = mocker.MagicMock()
+    mock_llm_response.content = "Please add a fixVersion."
+    mock_llm_instance.invoke.return_value = mock_llm_response
+    mocker.patch('app.tasks.ChatOpenAI', return_value=mock_llm_instance)
+
+    mock_jira_client_cls = mocker.patch('app.tasks.JiraClient')
+    mock_jira_client = mock_jira_client_cls.return_value
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "TLA-123"
+    mock_jira_client.search_issues.return_value = [mock_issue]
+
+    mock_comment1 = mocker.MagicMock()
+    mock_comment1.body = "Some normal comment"
+    mock_jira_client.get_comments.return_value = [mock_comment1]
+
+    from app.tasks import jira_missing_fixversion_reminder_task
+    result = await jira_missing_fixversion_reminder_task()
+
+    assert result == "Jira missing fixVersion reminder task completed"
+    mock_jira_client.search_issues.assert_called_once_with('project = "TLA" AND statusCategory = Done AND fixVersion is EMPTY')
+    mock_llm_instance.invoke.assert_called_once()
+    mock_jira_client.add_comment.assert_called_once_with("TLA-123", "Please add a fixVersion.\n\n<!-- AUTO_GENERATED_JIRA_MISSING_FIXVERSION_REMINDER -->")
+
+@pytest.mark.asyncio
+async def test_jira_missing_fixversion_reminder_task_already_reminded(mocker):
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default="": "TLA" if k == "JIRA_TRACKED_PROJECTS" else ("fake_key" if k == "OPENAI_API_KEY" else default)
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    mock_llm_instance = mocker.MagicMock()
+    mocker.patch("app.tasks.ChatOpenAI", return_value=mock_llm_instance)
+
+    mock_jira_client_cls = mocker.patch('app.tasks.JiraClient')
+    mock_jira_client = mock_jira_client_cls.return_value
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "TLA-123"
+    mock_jira_client.search_issues.return_value = [mock_issue]
+
+    mock_comment1 = mocker.MagicMock()
+    mock_comment1.body = "<!-- AUTO_GENERATED_JIRA_MISSING_FIXVERSION_REMINDER -->"
+    mock_jira_client.get_comments.return_value = [mock_comment1]
+
+    from app.tasks import jira_missing_fixversion_reminder_task
+    result = await jira_missing_fixversion_reminder_task()
+
+    assert result == "Jira missing fixVersion reminder task completed"
+    mock_llm_instance.invoke.assert_not_called()
+    mock_jira_client.add_comment.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_jira_missing_fixversion_reminder_task_no_api_key(mocker):
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = lambda k, default="": "" if k == "OPENAI_API_KEY" else default
+    mocker.patch("app.tasks.settings", mock_settings)
+
+    from app.tasks import jira_missing_fixversion_reminder_task
+    result = await jira_missing_fixversion_reminder_task()
+    assert result == "Jira missing fixVersion reminder task skipped (no OpenAI API key)"
