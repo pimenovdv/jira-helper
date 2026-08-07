@@ -1980,3 +1980,75 @@ async def jira_missing_fixversion_reminder_task():
 
     logger.info("Finished Jira missing fixVersion reminder task.")
     return "Jira missing fixVersion reminder task completed"
+
+async def gitlab_long_running_mr_reminder_task():
+    """
+    Checks if a GitLab Merge Request has been open for an unusually long time (> 14 days)
+    and notifies the authors to break it down or close it if no longer relevant.
+    """
+    from datetime import datetime, timezone
+    import logging
+
+    global GitLabClient, ChatOpenAI, settings, HumanMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab long-running MR reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping long-running MR reminder.")
+        return "GitLab long-running MR reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_LONG_RUNNING_MR_REMINDER -->"
+    now = datetime.now(timezone.utc)
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                try:
+                    # Check created_at
+                    # GitLab's created_at format is ISO 8601, e.g. "2023-01-01T12:00:00.000Z"
+                    created_at_str = mr.created_at
+                    # Replace Z with +00:00 for fromisoformat compatibility in python < 3.11
+                    if created_at_str.endswith('Z'):
+                        created_at_str = created_at_str[:-1] + '+00:00'
+                    created_at = datetime.fromisoformat(created_at_str)
+
+                    days_open = (now - created_at).days
+                    if days_open <= 14:
+                        continue
+
+                    notes = mr.notes.list(all=True)
+                    already_reminded = any(reminder_marker in getattr(note, 'body', '') for note in notes)
+                    if already_reminded:
+                        continue
+
+                    prompt = (
+                        f"Ты - вежливый технический помощник. Пожалуйста, напиши дружелюбное напоминание для автора "
+                        f"о Merge Request, который открыт уже {days_open} дней. "
+                        f"Заголовок MR: '{mr.title}'. "
+                        f"Предложи автору разбить MR на более мелкие части, чтобы ускорить ревью, "
+                        f"или закрыть его, если он больше не актуален. "
+                        f"Используй русский язык."
+                    )
+
+                    response = llm.invoke([HumanMessage(content=prompt)])
+
+                    note_body = f"{response.content}\n\n{reminder_marker}"
+                    gitlab_client.create_mr_note(project_id, mr.iid, note_body)
+                    logger.info(f"Added long-running MR reminder to MR {mr.iid} in project {project_id}")
+
+                except Exception as e:
+                    logger.error(f"Error checking long-running MR {mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing long-running MR reminder for project {project_id}: {e}")
+
+    logger.info("Finished automated GitLab long-running MR reminder task.")
+    return "GitLab long-running MR reminder task completed"
