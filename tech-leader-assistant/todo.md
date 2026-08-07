@@ -18,6 +18,6 @@
 - [x] Jira Automations: Weekly sprint summary, missing component/estimation/description/acceptance criteria reminders, overdue task reminders, unassigned sprint task reminders, stale task reminders, missing fixVersion reminders.
 
 ### Phase 24: New Automations and Features
-- [ ] **GitLab Long-Running MR Reminder**: Add a scheduled task to notify authors of MRs that have been open for an unusually long time (e.g., > 14 days), suggesting they be broken down or closed.
+- [x] **GitLab Long-Running MR Reminder**: Add a scheduled task to notify authors of MRs that have been open for an unusually long time (e.g., > 14 days), suggesting they be broken down or closed.
 - [ ] **Jira Inactive Reporter Notification**: Add a task that tags the reporter of a Jira issue if the issue has been resolved for 3 days but hasn't been closed/verified by the reporter.
 - [ ] **Jira Blocked Task Alert**: Add an automation that searches for tasks in an active sprint with a "Blocked" status for more than 2 days, and posts a comment tagging the Scrum Master or Tech Lead to help unblock it.
