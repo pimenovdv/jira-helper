@@ -2052,3 +2052,112 @@ async def gitlab_long_running_mr_reminder_task():
 
     logger.info("Finished automated GitLab long-running MR reminder task.")
     return "GitLab long-running MR reminder task completed"
+
+async def jira_inactive_reporter_reminder_task():
+    """
+    Checks Jira tasks that have been resolved for 3 days but haven't been closed/verified by the reporter,
+    and posts a comment tagging the reporter to verify and close the issue.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira inactive reporter reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira inactive reporter reminder.")
+        return "Jira inactive reporter reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_INACTIVE_REPORTER_REMINDER -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND status = "Resolved" AND updated <= -3d'
+        issues = jira_client.search_issues(jql)
+        logger.info(f"Found {len(issues)} resolved issues inactive for 3 days in project {project_key}")
+
+        for issue in issues:
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if not already_reminded:
+                    reporter_name = getattr(issue.fields.reporter, "displayName", "Reporter") if hasattr(issue.fields, "reporter") and issue.fields.reporter else "Reporter"
+                    reporter_mention = f"[~{getattr(issue.fields.reporter, 'accountId', '')}]" if hasattr(issue.fields, "reporter") and getattr(issue.fields.reporter, "accountId", None) else reporter_name
+
+                    prompt = (
+                        "Вы — технический лидер (Tech Lead). "
+                        f"Напишите короткое, вежливое сообщение автору ({reporter_name}) задачи Jira ({issue.key}), "
+                        "которая находится в статусе Resolved уже 3 дня, но не была проверена и закрыта. "
+                        f"Попросите его ({reporter_name}) проверить и закрыть задачу (статус Closed/Done), или вернуть в работу. "
+                        "Сообщение должно быть на русском языке. "
+                        f"В сообщение добавьте упоминание: {reporter_mention}"
+                    )
+
+                    response = await llm.ainvoke([HumanMessage(content=prompt)])
+                    comment_body = f"{response.content}\n\n{reminder_marker}"
+                    jira_client.add_comment(issue.key, comment_body)
+                    logger.info(f"Posted inactive reporter reminder on issue {issue.key}.")
+            except Exception as e:
+                logger.error(f"Error processing inactive reporter reminder for issue {issue.key}: {e}")
+
+    return "Jira inactive reporter reminder task complete."
+
+async def jira_blocked_task_alert_task():
+    """
+    Checks Jira tasks in active sprints that have been in 'Blocked' status for more than 2 days,
+    and posts a comment tagging the Scrum Master or Tech Lead for assistance.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira blocked task alert task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira blocked task alert.")
+        return "Jira blocked task alert task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_BLOCKED_TASK_ALERT -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND sprint in openSprints() AND status = "Blocked" AND updated <= -2d'
+        issues = jira_client.search_issues(jql)
+        logger.info(f"Found {len(issues)} blocked issues inactive for 2 days in active sprint in project {project_key}")
+
+        for issue in issues:
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if not already_reminded:
+                    prompt = (
+                        "Вы — автоматический помощник. "
+                        f"Напишите короткое сообщение для задачи Jira ({issue.key}), "
+                        "которая находится в статусе Blocked более 2 дней в активном спринте. "
+                        "Попросите Scrum Master или Tech Lead обратить внимание и помочь разблокировать задачу. "
+                        "Сообщение должно быть на русском языке. "
+                        "Упомяните, что задаче требуется помощь для разблокировки."
+                    )
+
+                    response = await llm.ainvoke([HumanMessage(content=prompt)])
+                    comment_body = f"{response.content}\n\n{reminder_marker}"
+                    jira_client.add_comment(issue.key, comment_body)
+                    logger.info(f"Posted blocked task alert on issue {issue.key}.")
+            except Exception as e:
+                logger.error(f"Error processing blocked task alert for issue {issue.key}: {e}")
+
+    return "Jira blocked task alert task complete."
