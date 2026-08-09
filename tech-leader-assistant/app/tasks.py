@@ -2161,3 +2161,253 @@ async def jira_blocked_task_alert_task():
                 logger.error(f"Error processing blocked task alert for issue {issue.key}: {e}")
 
     return "Jira blocked task alert task complete."
+
+async def gitlab_mr_approval_reminder_task():
+    """
+    Checks non-draft MRs that have been open for > 2 days, have no unresolved threads,
+    have passing pipelines, but are lacking approvals, and reminds the reviewers.
+    """
+    import logging
+    from datetime import datetime, timezone
+    import dateutil.parser
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR approval reminder task...")
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_GITLAB_MR_APPROVAL_REMINDER -->"
+    now = datetime.now(timezone.utc)
+
+    for pid in tracked_projects:
+        try:
+            mrs = gitlab_client.get_merge_requests(pid, state="opened")
+        except Exception as e:
+            logger.error(f"Failed to fetch MRs for project {pid}: {e}")
+            continue
+
+        for mr in mrs:
+            if getattr(mr, 'draft', False):
+                continue
+
+            created_at_str = getattr(mr, "created_at", None)
+            if not created_at_str:
+                continue
+
+            created_at = dateutil.parser.isoparse(created_at_str)
+            if (now - created_at).days <= 2:
+                continue
+
+            if mr.has_conflicts:
+                continue
+
+            try:
+                # check pipelines
+                pipelines = mr.pipelines.list(per_page=1)
+                if not pipelines or pipelines[0].status != "success":
+                    continue
+            except Exception:
+                continue
+
+            try:
+                discussions = mr.discussions.list(all=True)
+                has_unresolved = any(
+                    any(note.get('resolvable') and not note.get('resolved') for note in d.attributes.get('notes', []))
+                    for d in discussions
+                )
+                if has_unresolved:
+                    continue
+            except Exception:
+                pass
+
+            try:
+                approvals = mr.approvals.get()
+                if approvals.approved_by:
+                    continue
+            except Exception:
+                pass
+
+            try:
+                notes = mr.notes.list(all=True)
+                already_reminded = any(reminder_marker in (getattr(n, "body", "") or "") for n in notes)
+                if already_reminded:
+                    continue
+            except Exception:
+                pass
+
+            reviewers = [r.get("username", "") for r in getattr(mr, "reviewers", []) if r.get("username")]
+            tags = " ".join([f"@{r}" for r in reviewers]) if reviewers else ""
+
+            body = (
+                f"{reminder_marker}\n"
+                f"Привет! {tags}\n"
+                f"Этот MR открыт уже более 2 дней, пайплайны успешны и нет неразрешенных обсуждений. "
+                f"Пожалуйста, посмотрите и заапрувьте, если все ок!"
+            )
+            try:
+                gitlab_client.create_mr_note(pid, mr.iid, body)
+                logger.info(f"Posted approval reminder for MR !{mr.iid} in project {pid}.")
+            except Exception as e:
+                logger.error(f"Failed to post approval reminder for MR !{mr.iid}: {e}")
+
+    return "GitLab MR approval reminder task completed."
+
+async def jira_missing_epic_reminder_task():
+    """
+    Checks Jira tasks (except Sub-tasks and Epics) in active sprints that do not have an Epic Link,
+    and asks the author to add one.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira missing epic link reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira missing epic link reminder.")
+        return "Jira missing epic reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_MISSING_EPIC_REMINDER -->"
+
+    for j_proj in tracked_projects:
+        try:
+            sprints = jira_client.get_project_sprints(j_proj)
+            active_sprints = [s for s in sprints if s.get("state") == "active"]
+            if not active_sprints:
+                continue
+
+            for sprint in active_sprints:
+                issues = jira_client.get_sprint_issues(sprint["id"])
+                for issue in issues:
+                    issue_type = issue.get("fields", {}).get("issuetype", {}).get("name", "")
+                    if issue_type in ["Epic", "Sub-task"]:
+                        continue
+
+                    # Epic Link field is usually customfield_10014 or similar.
+                    # Or 'parent' for next-gen projects.
+                    fields = issue.get("fields", {})
+                    epic_link = fields.get("customfield_10014") or fields.get("parent")
+                    if epic_link:
+                        continue
+
+                    issue_key = issue.get("key")
+                    reporter = fields.get("reporter", {})
+                    reporter_account_id = reporter.get("accountId")
+
+                    if not reporter_account_id:
+                        continue
+
+                    comments = jira_client.get_issue_comments(issue_key)
+                    already_reminded = any(reminder_marker in c.get("body", "") for c in comments)
+
+                    if already_reminded:
+                        continue
+
+                    prompt = (
+                        f"Ты ассистент, который пишет вежливое напоминание в Jira на русском языке. "
+                        f"Задача (кроме Epic и Sub-task) не привязана к Epic. "
+                        f"Упомяни [~accountid:{reporter_account_id}], чтобы он привязал задачу к соответствующему Epic, так как это важно для отслеживания релизов и фич. "
+                        f"Верни только текст комментария, без кавычек и дополнительных пояснений."
+                    )
+
+                    try:
+                        resp = llm.invoke([HumanMessage(content=prompt)])
+                        comment_text = f"{reminder_marker}\n{resp.content.strip()}"
+                        jira_client.add_issue_comment(issue_key, comment_text)
+                        logger.info(f"Posted missing epic reminder for Jira issue {issue_key}.")
+                    except Exception as e:
+                        logger.error(f"Failed to process missing epic reminder for Jira issue {issue_key}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to process Jira missing epic reminder for project {j_proj}: {e}")
+
+    return "Jira missing epic reminder task completed."
+
+async def jira_high_complexity_warning_task():
+    """
+    Checks Jira tasks with high story point estimations (>= 13)
+    and suggests breaking them down into sub-tasks.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira high complexity warning task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira high complexity warning.")
+        return "Jira high complexity warning task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+    story_points_field = settings.get("JIRA_STORY_POINTS_FIELD", "customfield_10016")
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_HIGH_COMPLEXITY_WARNING -->"
+
+    for j_proj in tracked_projects:
+        try:
+            sprints = jira_client.get_project_sprints(j_proj)
+            active_sprints = [s for s in sprints if s.get("state") == "active"]
+            if not active_sprints:
+                continue
+
+            for sprint in active_sprints:
+                issues = jira_client.get_sprint_issues(sprint["id"])
+                for issue in issues:
+                    fields = issue.get("fields", {})
+                    issue_type = fields.get("issuetype", {}).get("name", "")
+                    if issue_type in ["Epic"]:
+                        continue
+
+                    sp = fields.get(story_points_field)
+                    try:
+                        sp_val = float(sp)
+                    except (TypeError, ValueError):
+                        sp_val = 0
+
+                    if sp_val < 13:
+                        continue
+
+                    issue_key = issue.get("key")
+                    reporter = fields.get("reporter", {})
+                    reporter_account_id = reporter.get("accountId")
+
+                    if not reporter_account_id:
+                        continue
+
+                    comments = jira_client.get_issue_comments(issue_key)
+                    already_reminded = any(reminder_marker in c.get("body", "") for c in comments)
+
+                    if already_reminded:
+                        continue
+
+                    prompt = (
+                        f"Ты Scrum Master, пишущий комментарий в Jira на русском языке. "
+                        f"У этой задачи высокая оценка ({sp_val} Story Points). "
+                        f"Упомяни [~accountid:{reporter_account_id}] и предложи декомпозировать задачу на подзадачи (Sub-tasks), чтобы ее было легче оценить и выполнить. "
+                        f"Верни только текст комментария, без кавычек и дополнительных пояснений."
+                    )
+
+                    try:
+                        resp = llm.invoke([HumanMessage(content=prompt)])
+                        comment_text = f"{reminder_marker}\n{resp.content.strip()}"
+                        jira_client.add_issue_comment(issue_key, comment_text)
+                        logger.info(f"Posted high complexity warning for Jira issue {issue_key}.")
+                    except Exception as e:
+                        logger.error(f"Failed to process high complexity warning for Jira issue {issue_key}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to process Jira high complexity warning for project {j_proj}: {e}")
+
+    return "Jira high complexity warning task completed."
