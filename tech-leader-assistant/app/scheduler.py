@@ -1,5 +1,8 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .tasks import (
+    jira_high_complexity_warning_task,
+    jira_missing_epic_reminder_task,
+    gitlab_mr_approval_reminder_task,
     gitlab_sync_task,
     jira_sync_task,
     opensearch_ingestion_task,
@@ -91,6 +94,9 @@ def setup_scheduler():
     scheduler.add_job(gitlab_long_running_mr_reminder_task, 'cron', hour=11, minute=30, id="gitlab_long_running_mr_reminder")
     scheduler.add_job(jira_inactive_reporter_reminder_task, 'cron', hour=12, minute=0, id="jira_inactive_reporter_reminder")
     scheduler.add_job(jira_blocked_task_alert_task, 'cron', hour=13, minute=0, id="jira_blocked_task_alert")
+    scheduler.add_job(jira_missing_epic_reminder_task, 'cron', hour=14, minute=15, id="jira_missing_epic_reminder")
+    scheduler.add_job(jira_high_complexity_warning_task, 'cron', hour=14, minute=30, id="jira_high_complexity_warning")
+    scheduler.add_job(gitlab_mr_approval_reminder_task, 'cron', hour=14, minute=0, id="gitlab_mr_approval_reminder")
 
     logger.info("APScheduler jobs configured.")
 
