@@ -19,7 +19,7 @@ def mock_jira_client(mocker):
 def mock_llm(mocker):
     mock_cls = mocker.patch.object(tasks, "ChatOpenAI")
     mock_instance = mock_cls.return_value
-    mock_instance.invoke.return_value = MagicMock(content="Mock response")
+    mock_instance.ainvoke = mocker.AsyncMock(return_value=MagicMock(content="Mock response"))
     return mock_instance
 
 @pytest.mark.asyncio
@@ -47,7 +47,7 @@ async def test_jira_high_complexity_warning_task_success(mock_settings, mock_jir
 
     res = await jira_high_complexity_warning_task()
 
-    mock_llm.invoke.assert_called_once()
+    mock_llm.ainvoke.assert_called_once()
     mock_jira_client.add_issue_comment.assert_called_once()
     args = mock_jira_client.add_issue_comment.call_args[0]
     assert args[0] == "PROJ-1"
@@ -69,7 +69,7 @@ async def test_jira_high_complexity_warning_task_skip_epic(mock_settings, mock_j
     mock_jira_client.get_sprint_issues.return_value = [mock_issue]
 
     await jira_high_complexity_warning_task()
-    mock_llm.invoke.assert_not_called()
+    mock_llm.ainvoke.assert_not_called()
     mock_jira_client.add_issue_comment.assert_not_called()
 
 @pytest.mark.asyncio
@@ -86,5 +86,5 @@ async def test_jira_high_complexity_warning_task_low_complexity(mock_settings, m
     mock_jira_client.get_sprint_issues.return_value = [mock_issue]
 
     await jira_high_complexity_warning_task()
-    mock_llm.invoke.assert_not_called()
+    mock_llm.ainvoke.assert_not_called()
     mock_jira_client.add_issue_comment.assert_not_called()

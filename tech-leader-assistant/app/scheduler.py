@@ -32,7 +32,10 @@ from .tasks import (
     jira_missing_fixversion_reminder_task,
     gitlab_long_running_mr_reminder_task,
     jira_inactive_reporter_reminder_task,
-    jira_blocked_task_alert_task
+    jira_blocked_task_alert_task,
+    gitlab_mr_missing_assignee_notifier_task,
+    jira_missing_labels_reminder_task,
+    gitlab_stale_draft_mr_closer_task
 )
 import logging
 
@@ -97,6 +100,10 @@ def setup_scheduler():
     scheduler.add_job(jira_missing_epic_reminder_task, 'cron', hour=14, minute=15, id="jira_missing_epic_reminder")
     scheduler.add_job(jira_high_complexity_warning_task, 'cron', hour=14, minute=30, id="jira_high_complexity_warning")
     scheduler.add_job(gitlab_mr_approval_reminder_task, 'cron', hour=14, minute=0, id="gitlab_mr_approval_reminder")
+    scheduler.add_job(gitlab_mr_missing_assignee_notifier_task, 'cron', hour='*/3', minute=30, id="gitlab_mr_missing_assignee_notifier")
+    scheduler.add_job(jira_missing_labels_reminder_task, 'cron', hour='*/4', minute=45, id="jira_missing_labels_reminder")
+    scheduler.add_job(gitlab_stale_draft_mr_closer_task, 'cron', hour=3, minute=30, id="gitlab_stale_draft_mr_closer")
+
 
     logger.info("APScheduler jobs configured.")
 

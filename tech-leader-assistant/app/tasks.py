@@ -2319,7 +2319,7 @@ async def jira_missing_epic_reminder_task():
                     )
 
                     try:
-                        resp = llm.invoke([HumanMessage(content=prompt)])
+                        resp = await llm.ainvoke([HumanMessage(content=prompt)])
                         comment_text = f"{reminder_marker}\n{resp.content.strip()}"
                         jira_client.add_issue_comment(issue_key, comment_text)
                         logger.info(f"Posted missing epic reminder for Jira issue {issue_key}.")
@@ -2400,7 +2400,7 @@ async def jira_high_complexity_warning_task():
                     )
 
                     try:
-                        resp = llm.invoke([HumanMessage(content=prompt)])
+                        resp = await llm.ainvoke([HumanMessage(content=prompt)])
                         comment_text = f"{reminder_marker}\n{resp.content.strip()}"
                         jira_client.add_issue_comment(issue_key, comment_text)
                         logger.info(f"Posted high complexity warning for Jira issue {issue_key}.")
@@ -2411,3 +2411,191 @@ async def jira_high_complexity_warning_task():
             logger.error(f"Failed to process Jira high complexity warning for project {j_proj}: {e}")
 
     return "Jira high complexity warning task completed."
+
+
+async def gitlab_mr_missing_assignee_notifier_task():
+    """
+    Iterates through opened MRs, checks if assignee is missing. If so, uses LLM to generate a reminder text
+    and posts it via create_mr_note.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR missing assignee notifier task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping MR missing assignee notifier.")
+        return "GitLab MR missing assignee notifier task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_MR_MISSING_ASSIGNEE_NOTIFIER -->"
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                try:
+                    if getattr(mr, 'assignee', None):
+                        continue
+
+                    # Also check if it's draft, sometimes we don't want to bother if it's draft
+                    if getattr(mr, 'draft', False) or getattr(mr, 'title', '').lower().startswith("draft:"):
+                        continue
+
+                    notes = mr.notes.list(all=True)
+                    already_reminded = any(reminder_marker in note.body for note in notes)
+
+                    if not already_reminded:
+                        author_name = getattr(getattr(mr, 'author', None), 'username', 'Author')
+                        prompt = (
+                            f"Ты - вежливый технический помощник. Напиши очень короткий комментарий (на русском языке) "
+                            f"для автора Merge Request (упомяни @{author_name}), в котором скажи, что в этом MR "
+                            f"({mr.title}) не указан assignee (ответственный), и попроси его назначить. "
+                            f"Без приветствий, просто текст напоминания."
+                        )
+                        resp = await llm.ainvoke([HumanMessage(content=prompt)])
+                        comment_text = f"{reminder_marker}\n{resp.content.strip()}"
+
+                        gitlab_client.create_mr_note(project_id, mr.iid, comment_text)
+                        logger.info(f"Posted missing assignee reminder for MR !{mr.iid} in project {project_id}.")
+
+                except Exception as e:
+                    logger.error(f"Error processing missing assignee for MR !{getattr(mr, 'iid', 'unknown')} in project {project_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing MR missing assignee for GitLab project {project_id}: {e}")
+
+    return "GitLab MR missing assignee notifier task completed."
+
+async def jira_missing_labels_reminder_task():
+    """
+    Checks Jira tasks in active sprints that lack labels and prompts the team to add them.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+    global JiraClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira missing labels reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira missing labels reminder.")
+        return "Jira missing labels reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_MISSING_LABELS_REMINDER -->"
+
+    for project_key in tracked_projects:
+        try:
+            jql = f'project = "{project_key}" AND sprint in openSprints()'
+            issues = jira_client.search_issues(jql)
+
+            for issue in issues:
+                labels = getattr(issue.fields, "labels", [])
+                if labels:
+                    continue
+
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if already_reminded:
+                    continue
+
+                reporter_name = getattr(issue.fields.reporter, "displayName", "Reporter") if hasattr(issue.fields, "reporter") and issue.fields.reporter else "Reporter"
+                reporter_mention = f"[~{getattr(issue.fields.reporter, 'accountId', '')}]" if hasattr(issue.fields, "reporter") and getattr(issue.fields.reporter, "accountId", None) else reporter_name
+
+                prompt = (
+                    f"Ты - вежливый Scrum Master. Напиши короткий комментарий (на русском языке) для "
+                    f"задачи {issue.key}. Упомяни {reporter_mention} и напомни, что в задаче не проставлены метки (labels), "
+                    f"и попроси их добавить для лучшей категоризации и отслеживания. "
+                    f"Без приветствий, просто текст напоминания."
+                )
+                resp = await llm.ainvoke([HumanMessage(content=prompt)])
+                comment_text = f"{reminder_marker}\n{resp.content.strip()}"
+
+                jira_client.add_comment(issue.key, comment_text)
+                logger.info(f"Posted missing labels reminder for Jira issue {issue.key}.")
+
+        except Exception as e:
+            logger.error(f"Error processing missing labels for project {project_key}: {e}")
+
+    return "Jira missing labels reminder task completed."
+
+async def gitlab_stale_draft_mr_closer_task():
+    """
+    Closes Draft MRs that have been inactive for over 30 days.
+    """
+    import logging
+    from datetime import datetime, timezone
+    import dateutil.parser
+    global GitLabClient, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab stale draft MR closer task...")
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    now = datetime.now(timezone.utc)
+    reminder_marker = "<!-- AUTO_GENERATED_STALE_DRAFT_MR_CLOSER -->"
+
+    for project_id in tracked_projects:
+        try:
+            gl_project = gitlab_client.get_project(project_id)
+            if not gl_project:
+                continue
+
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                try:
+                    if not (getattr(mr, 'draft', False) or getattr(mr, 'title', '').lower().startswith("draft:")):
+                        continue
+
+                    updated_at_str = getattr(mr, "updated_at", None)
+                    if not updated_at_str:
+                        continue
+
+                    # Handle python < 3.11 fromisoformat 'Z' issue
+                    if updated_at_str.endswith('Z'):
+                        updated_at_str = updated_at_str[:-1] + '+00:00'
+                    updated_at = datetime.fromisoformat(updated_at_str)
+
+                    if updated_at.tzinfo is None:
+                        updated_at = updated_at.replace(tzinfo=timezone.utc)
+
+                    days_inactive = (now - updated_at).days
+                    if days_inactive > 30:
+                        # Fetch the full object to ensure we can edit and save
+                        full_mr = gl_project.mergerequests.get(mr.iid)
+
+                        full_mr.state_event = 'close'
+                        full_mr.save()
+
+                        comment_text = (
+                            f"{reminder_marker}\n"
+                            f"Этот Draft Merge Request не обновлялся более 30 дней, поэтому он был автоматически закрыт. "
+                            f"Вы можете открыть его снова (Reopen), когда будете готовы продолжить работу."
+                        )
+                        gitlab_client.create_mr_note(project_id, mr.iid, comment_text)
+                        logger.info(f"Closed stale Draft MR !{mr.iid} in project {project_id}.")
+
+                except Exception as e:
+                    logger.error(f"Error processing stale draft closer for MR !{getattr(mr, 'iid', 'unknown')} in project {project_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing MR stale draft closer for GitLab project {project_id}: {e}")
+
+    return "GitLab stale draft MR closer task completed."
