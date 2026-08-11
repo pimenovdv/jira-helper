@@ -1,8 +1,12 @@
 import pytest
 from unittest.mock import MagicMock
+
+from app.tasks import gitlab_mr_missing_assignee_notifier_task, jira_missing_labels_reminder_task, gitlab_stale_draft_mr_closer_task
 from app.tasks import gitlab_unresolved_threads_reminder_task, jira_sync_task, confluence_auto_link_task, opensearch_ingestion_task, generate_release_notes_task
 import app.tasks as tasks
 from datetime import datetime, timezone, timedelta, timezone, timedelta
+
+from app.tasks import gitlab_mr_missing_assignee_notifier_task, jira_missing_labels_reminder_task, gitlab_stale_draft_mr_closer_task
 from app.tasks import gitlab_unresolved_threads_reminder_task, jira_sync_task, confluence_auto_link_task, opensearch_ingestion_task, generate_release_notes_task
 
 @pytest.fixture(autouse=True)
@@ -23,6 +27,7 @@ async def test_jira_sync_task(mocker):
 
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = mock_settings_get
+
     mocker.patch('app.tasks.settings', mock_settings)
 
 
@@ -136,6 +141,7 @@ async def test_confluence_auto_link_task(mocker):
 
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = mock_settings_get
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     # Mock GitLabClient
@@ -201,6 +207,7 @@ def test_opensearch_ingestion_task(mocker):
 
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = mock_settings_get
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     # Mock ConfluenceClient
@@ -251,6 +258,7 @@ def test_generate_release_notes_task(mocker):
 
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = mock_settings_get
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     # Mock JiraClient
@@ -540,6 +548,7 @@ async def test_gitlab_merged_branch_cleanup_task(mocker):
     # Properly mock dynaconf settings
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = lambda k, default='': '1' if k == 'GITLAB_TRACKED_PROJECTS' else default
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     mock_gl = mocker.patch('app.tasks.GitLabClient').return_value
@@ -579,6 +588,7 @@ async def test_gitlab_merged_branch_cleanup_task(mocker):
 async def test_gitlab_mr_conflict_notifier_task_has_conflict(mocker):
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = lambda k, default='': '1' if k == 'GITLAB_TRACKED_PROJECTS' else 'test_key' if k == 'OPENAI_API_KEY' else default
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     mock_gl_client = mocker.patch('app.tasks.GitLabClient').return_value
@@ -615,6 +625,7 @@ async def test_gitlab_mr_conflict_notifier_task_has_conflict(mocker):
 async def test_gitlab_mr_conflict_notifier_task_no_conflict(mocker):
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = lambda k, default='': '1' if k == 'GITLAB_TRACKED_PROJECTS' else 'test_key' if k == 'OPENAI_API_KEY' else default
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     mock_gl_client = mocker.patch('app.tasks.GitLabClient').return_value
@@ -638,6 +649,7 @@ async def test_gitlab_mr_conflict_notifier_task_no_conflict(mocker):
 async def test_gitlab_mr_conflict_notifier_task_already_notified(mocker):
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = lambda k, default='': '1' if k == 'GITLAB_TRACKED_PROJECTS' else 'test_key' if k == 'OPENAI_API_KEY' else default
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     mock_gl_client = mocker.patch('app.tasks.GitLabClient').return_value
@@ -674,6 +686,7 @@ async def test_gitlab_empty_mr_description_notifier_task(mocker):
 
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = mock_settings_get
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     # Mock ChatOpenAI
@@ -734,6 +747,7 @@ async def test_gitlab_empty_mr_description_notifier_task_long_description(mocker
 
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = mock_settings_get
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     # Mock ChatOpenAI
@@ -911,6 +925,7 @@ async def test_gitlab_unresolved_threads_reminder_task(mocker):
 
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = mock_settings_get
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     # Mock LLM
@@ -975,6 +990,7 @@ async def test_jira_sprint_unassigned_task_reminder(mocker):
     # Mock settings to return a test project and dummy API key
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = lambda k, default="": "PROJ" if k == "JIRA_TRACKED_PROJECTS" else ("dummy_key" if k == "OPENAI_API_KEY" else default)
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     # Mock LLM
@@ -1009,6 +1025,7 @@ async def test_jira_sprint_unassigned_task_reminder(mocker):
 async def test_jira_sprint_unassigned_task_reminder_already_notified(mocker):
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = lambda k, default="": "PROJ" if k == "JIRA_TRACKED_PROJECTS" else ("dummy_key" if k == "OPENAI_API_KEY" else default)
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     mock_llm_instance = mocker.MagicMock()
@@ -1037,6 +1054,7 @@ async def test_jira_sprint_unassigned_task_reminder_already_notified(mocker):
 async def test_jira_sprint_unassigned_task_reminder_no_api_key(mocker):
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = lambda k, default="": "PROJ" if k == "JIRA_TRACKED_PROJECTS" else ("" if k == "OPENAI_API_KEY" else default)
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     mock_jira_client_cls = mocker.patch('app.tasks.JiraClient')
@@ -1050,6 +1068,7 @@ async def test_jira_sprint_unassigned_task_reminder_no_api_key(mocker):
 async def test_jira_missing_fixversion_reminder_task(mocker):
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = lambda k, default="": "TLA" if k == "JIRA_TRACKED_PROJECTS" else ("fake_key" if k == "OPENAI_API_KEY" else default)
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     mock_llm_instance = mocker.MagicMock()
@@ -1080,6 +1099,7 @@ async def test_jira_missing_fixversion_reminder_task(mocker):
 async def test_jira_missing_fixversion_reminder_task_already_reminded(mocker):
     mock_settings = mocker.MagicMock()
     mock_settings.get.side_effect = lambda k, default="": "TLA" if k == "JIRA_TRACKED_PROJECTS" else ("fake_key" if k == "OPENAI_API_KEY" else default)
+
     mocker.patch('app.tasks.settings', mock_settings)
 
     mock_llm_instance = mocker.MagicMock()
@@ -1111,3 +1131,115 @@ async def test_jira_missing_fixversion_reminder_task_no_api_key(mocker):
     from app.tasks import jira_missing_fixversion_reminder_task
     result = await jira_missing_fixversion_reminder_task()
     assert result == "Jira missing fixVersion reminder task skipped (no OpenAI API key)"
+
+
+@pytest.mark.asyncio
+async def test_gitlab_mr_missing_assignee_notifier_task(mocker, mock_settings):
+    """Tests gitlab_mr_missing_assignee_notifier_task comments when assignee is missing."""
+
+    mocker.patch('app.tasks.settings', mock_settings)
+    mock_gl_client = mocker.patch('app.tasks.GitLabClient')
+    mock_llm = mocker.patch('app.tasks.ChatOpenAI')
+
+    instance = mock_gl_client.return_value
+
+    mock_mr = mocker.Mock()
+    mock_mr.iid = 1
+    mock_mr.title = "Test MR"
+    mock_mr.assignee = None
+    mock_mr.draft = False
+    mock_mr.author = mocker.Mock(username="tester")
+
+    mock_note = mocker.Mock()
+    mock_note.body = "some body"
+    mock_mr.notes.list.return_value = [mock_note]
+
+    instance.get_project_merge_requests.return_value = [mock_mr]
+
+    mock_resp = mocker.Mock()
+    mock_resp.content = "Please assign a reviewer."
+    mock_llm.return_value.ainvoke = mocker.AsyncMock(return_value=mock_resp)
+
+    res = await gitlab_mr_missing_assignee_notifier_task()
+
+    assert res == "GitLab MR missing assignee notifier task completed."
+    instance.create_mr_note.assert_called_once()
+    args = instance.create_mr_note.call_args[0]
+    assert "AUTO_GENERATED_MR_MISSING_ASSIGNEE_NOTIFIER" in args[2]
+    assert "Please assign a reviewer." in args[2]
+
+
+@pytest.mark.asyncio
+async def test_jira_missing_labels_reminder_task(mocker, mock_settings):
+    """Tests jira_missing_labels_reminder_task comments when labels are missing."""
+
+    mock_settings.get.side_effect = lambda k, default="": "TLA" if k == "JIRA_TRACKED_PROJECTS" else "dummy"
+    mocker.patch('app.tasks.settings', mock_settings)
+    mock_jira_client = mocker.patch('app.tasks.JiraClient')
+    mock_llm = mocker.patch('app.tasks.ChatOpenAI')
+
+    instance = mock_jira_client.return_value
+
+    mock_issue = mocker.Mock()
+    mock_issue.key = "TEST-123"
+    mock_issue.fields = mocker.Mock()
+    mock_issue.fields.labels = []
+    mock_issue.fields.issuetype = mocker.Mock(name='Task')
+    mock_issue.fields.reporter = mocker.Mock(accountId="123", displayName="Tester")
+
+    mock_comment = mocker.Mock()
+    mock_comment.body = "no marker here"
+    mock_issue.get = lambda x, d=None: getattr(mock_issue, x, d)
+
+    instance.search_issues.return_value = [mock_issue]
+    instance.get_comments.return_value = [mock_comment]
+
+    mock_resp = mocker.Mock()
+    mock_resp.content = "Please add labels."
+    mock_llm.return_value.ainvoke = mocker.AsyncMock(return_value=mock_resp)
+
+    res = await jira_missing_labels_reminder_task()
+
+    assert res == "Jira missing labels reminder task completed."
+    instance.add_comment.assert_called_once()
+    args = instance.add_comment.call_args[0]
+    assert "AUTO_GENERATED_JIRA_MISSING_LABELS_REMINDER" in args[1]
+    assert "Please add labels." in args[1]
+
+
+@pytest.mark.asyncio
+async def test_gitlab_stale_draft_mr_closer_task(mocker, mock_settings):
+    """Tests gitlab_stale_draft_mr_closer_task closes stale draft MRs."""
+
+    mocker.patch('app.tasks.settings', mock_settings)
+    mock_gl_client = mocker.patch('app.tasks.GitLabClient')
+
+    instance = mock_gl_client.return_value
+
+    mock_mr = mocker.Mock()
+    mock_mr.iid = 1
+    mock_mr.title = "Draft: Test MR"
+    mock_mr.draft = True
+
+    # 40 days ago
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    updated_at = now - timedelta(days=40)
+    mock_mr.updated_at = updated_at.isoformat()
+
+    instance.get_project.return_value = mocker.Mock()
+
+    # Needs to return full MR object when calling get on mergerequests manager
+    mock_full_mr = mocker.Mock()
+    instance.get_project.return_value.mergerequests.get.return_value = mock_full_mr
+
+    instance.get_project_merge_requests.return_value = [mock_mr]
+
+    res = await gitlab_stale_draft_mr_closer_task()
+
+    assert res == "GitLab stale draft MR closer task completed."
+    assert mock_full_mr.state_event == 'close'
+    mock_full_mr.save.assert_called_once()
+    instance.create_mr_note.assert_called_once()
+    args = instance.create_mr_note.call_args[0]
+    assert "AUTO_GENERATED_STALE_DRAFT_MR_CLOSER" in args[2]
