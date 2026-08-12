@@ -1243,3 +1243,62 @@ async def test_gitlab_stale_draft_mr_closer_task(mocker, mock_settings):
     instance.create_mr_note.assert_called_once()
     args = instance.create_mr_note.call_args[0]
     assert "AUTO_GENERATED_STALE_DRAFT_MR_CLOSER" in args[2]
+import pytest
+from app.tasks import gitlab_mr_missing_milestone_notifier_task
+
+@pytest.mark.asyncio
+async def test_gitlab_mr_missing_milestone_notifier_task(mocker, mock_settings):
+    """Tests gitlab_mr_missing_milestone_notifier_task sends a note for MRs without milestone."""
+    mocker.patch('app.tasks.settings', mock_settings)
+    mock_gl_client = mocker.patch('app.tasks.GitLabClient')
+    mock_chat_openai = mocker.patch('app.tasks.ChatOpenAI')
+
+    mock_llm_instance = mock_chat_openai.return_value
+    mock_llm_response = mocker.Mock()
+    mock_llm_response.content = "Please set a milestone."
+    mock_llm_instance.ainvoke = mocker.AsyncMock(return_value=mock_llm_response)
+
+    instance = mock_gl_client.return_value
+
+    # MR without milestone
+    mock_mr_no_milestone = mocker.Mock()
+    mock_mr_no_milestone.iid = 1
+    mock_mr_no_milestone.title = "MR without milestone"
+    mock_mr_no_milestone.milestone = None
+    mock_note_no_marker = mocker.Mock()
+    mock_note_no_marker.body = "Just a regular comment."
+    mock_mr_no_milestone.notes.list.return_value = [mock_note_no_marker]
+
+    # MR with milestone
+    mock_mr_with_milestone = mocker.Mock()
+    mock_mr_with_milestone.iid = 2
+    mock_mr_with_milestone.title = "MR with milestone"
+    mock_mr_with_milestone.milestone = {"id": 123, "title": "Sprint 1"}
+
+    # MR without milestone, already notified
+    mock_mr_already_notified = mocker.Mock()
+    mock_mr_already_notified.iid = 3
+    mock_mr_already_notified.title = "MR already notified"
+    mock_mr_already_notified.milestone = None
+    mock_note_marker = mocker.Mock()
+    mock_note_marker.body = "<!-- AUTO_GENERATED_MISSING_MILESTONE_NOTIFIER -->\nPlease set a milestone."
+    mock_mr_already_notified.notes.list.return_value = [mock_note_marker]
+
+    mock_project = mocker.Mock()
+    mock_project.mergerequests.list.return_value = [mock_mr_no_milestone, mock_mr_with_milestone, mock_mr_already_notified]
+    instance.client.projects.get.return_value = mock_project
+
+    result = await gitlab_mr_missing_milestone_notifier_task()
+
+    assert result == "GitLab missing milestone notifier task completed."
+
+    # Assert note created for MR 1
+    instance.create_mr_note.assert_called_once()
+    args, _ = instance.create_mr_note.call_args
+    assert args[0] == "123" # project id
+    assert args[1] == 1 # mr iid
+    assert "<!-- AUTO_GENERATED_MISSING_MILESTONE_NOTIFIER -->" in args[2]
+    assert "Please set a milestone." in args[2]
+
+    # Assert LLM was called once
+    mock_llm_instance.ainvoke.assert_called_once()

@@ -2599,3 +2599,56 @@ async def gitlab_stale_draft_mr_closer_task():
             logger.error(f"Error processing MR stale draft closer for GitLab project {project_id}: {e}")
 
     return "GitLab stale draft MR closer task completed."
+async def gitlab_mr_missing_milestone_notifier_task():
+    """
+    Iterates over open MRs for tracked projects.
+    If an MR has no milestone, checks if a reminder has been sent.
+    If not, generates a polite notification via LLM in Russian asking to add a milestone.
+    """
+    import logging
+    # Use global imports so mocker can patch them in app.tasks
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab missing milestone notifier task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping missing milestone notifier.")
+        return "GitLab missing milestone notifier task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    gitlab_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [p.strip() for p in gitlab_projects if p.strip()]
+
+    client = GitLabClient()
+    reminder_marker = "<!-- AUTO_GENERATED_MISSING_MILESTONE_NOTIFIER -->"
+
+    for project_id in gitlab_projects:
+        try:
+            project = client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                if mr.milestone is None:
+                    mr_notes = mr.notes.list(get_all=True)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
+
+                    if not already_notified:
+                        messages = [
+                            SystemMessage(
+                                content="Ты — помощник техлида. Твоя задача — вежливо напомнить разработчику о необходимости указать майлстоун (milestone) в GitLab Merge Request. "
+                                        "Напиши короткое, дружелюбное сообщение на русском языке."
+                            ),
+                            HumanMessage(content=f"Напиши комментарий для Merge Request '{mr.title}', в котором нет майлстоуна.")
+                        ]
+                        response = await llm.ainvoke(messages)
+                        comment_body = f"{reminder_marker}\n{response.content}"
+
+                        client.create_mr_note(project_id, mr.iid, comment_body)
+                        logger.info(f"Posted missing milestone reminder for MR !{mr.iid} in project {project_id}.")
+        except Exception as e:
+            logger.error(f"Error processing missing milestone notifier for GitLab project {project_id}: {e}")
+
+    return "GitLab missing milestone notifier task completed."

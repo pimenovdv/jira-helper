@@ -11,13 +11,10 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-25)
+### Completed Phases (1-26)
 - [x] Initial setup, UI dashboard, DB integrations. Jira/GitLab core sync logic and agentic RAG workflows.
 - [x] GitLab & Jira Automations (Summarization, linting, cleanup, reminders, summaries).
-- [x] Phase 24: GitLab Long-Running MR Reminder, Jira Inactive Reporter Notification, Jira Blocked Task Alert
-- [x] Phase 25: GitLab MR Approval Reminder, Jira Missing Epic Link Reminder, Jira High Complexity Warning
+- [x] Phases 24-26: Workflow enforcements, code quality notifications, stalled/blocked task reminders, missing assignments and metadata warnings.
 
-### Phase 26: Code quality and workflow enforcement
-- [x] GitLab Missing Assignee Notifier
-- [x] Jira Missing Labels Reminder
-- [x] GitLab Stale Draft MR Closer
+### Phase 27: Backlog and tracking health
+- [x] GitLab Missing Milestone Notifier
