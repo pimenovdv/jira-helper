@@ -11,10 +11,13 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-26)
+### Completed Phases (1-27)
 - [x] Initial setup, UI dashboard, DB integrations. Jira/GitLab core sync logic and agentic RAG workflows.
 - [x] GitLab & Jira Automations (Summarization, linting, cleanup, reminders, summaries).
-- [x] Phases 24-26: Workflow enforcements, code quality notifications, stalled/blocked task reminders, missing assignments and metadata warnings.
+- [x] Phases 24-27: Workflow enforcements, code quality notifications, stalled/blocked task reminders, missing assignments, metadata warnings and backlog tracking health.
 
-### Phase 27: Backlog and tracking health
-- [x] GitLab Missing Milestone Notifier
+
+### Phase 28: Issue & PR Maintenance
+- [x] Jira Large Story Decomposition Reminder (Task > 8 SP without subtasks)
+- [ ] Jira High Priority Out of Sprint Reminder (Highest priority not in active sprint)
+- [ ] GitLab MR Description Checklist Validator (Checks if MR description contains a checklist if required)

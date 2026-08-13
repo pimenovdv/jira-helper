@@ -1302,3 +1302,52 @@ async def test_gitlab_mr_missing_milestone_notifier_task(mocker, mock_settings):
 
     # Assert LLM was called once
     mock_llm_instance.ainvoke.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_jira_large_story_decomposition_reminder_task(mocker):
+    def mock_settings_get(key, default=""):
+        if key == "OPENAI_API_KEY":
+            return "fake_key"
+        if key == "JIRA_TRACKED_PROJECTS":
+            return "PROJ1"
+        if key == "JIRA_STORY_POINTS_FIELD":
+            return "customfield_10016"
+        return default
+
+    mocker.patch("app.tasks.settings.get", side_effect=mock_settings_get)
+
+    mock_llm_instance = mocker.MagicMock()
+    mock_llm_instance.ainvoke = mocker.AsyncMock(return_value=mocker.MagicMock(content="Декомпозируйте задачу"))
+    mocker.patch("app.tasks.ChatOpenAI", return_value=mock_llm_instance)
+
+    mock_jira_client_instance = mocker.MagicMock()
+
+    class MockFields:
+        def __init__(self, sp, subtasks):
+            self.customfield_10016 = sp
+            self.subtasks = subtasks
+            self.assignee = mocker.MagicMock(displayName="Test User", accountId="123")
+
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "PROJ1-123"
+    mock_issue.fields = MockFields(10.0, [])
+
+    mock_jira_client_instance.search_issues.return_value = [mock_issue]
+
+    mock_comment = mocker.MagicMock()
+    mock_comment.body = "Обычный коммент"
+    mock_jira_client_instance.get_comments.return_value = [mock_comment]
+
+    mocker.patch("app.tasks.JiraClient", return_value=mock_jira_client_instance)
+
+    from app.tasks import jira_large_story_decomposition_reminder_task
+    print("\nDEBUG:")
+    mock_jira_client_instance.add_comment.side_effect = lambda *args: print(f"ADD COMMENT called with {args}")
+    result = await jira_large_story_decomposition_reminder_task()
+
+    assert "task completed" in result
+    assert mock_jira_client_instance.add_comment.called
+    args, _ = mock_jira_client_instance.add_comment.call_args
+    assert args[0] == "PROJ1-123"
+    assert "AUTO_GENERATED_JIRA_LARGE_STORY_DECOMPOSITION_REMINDER" in args[1]
+    assert "Декомпозируйте задачу" in args[1]
