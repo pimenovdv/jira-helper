@@ -2652,3 +2652,78 @@ async def gitlab_mr_missing_milestone_notifier_task():
             logger.error(f"Error processing missing milestone notifier for GitLab project {project_id}: {e}")
 
     return "GitLab missing milestone notifier task completed."
+
+async def jira_large_story_decomposition_reminder_task():
+    """
+    Checks Jira tasks that have > 8 story points but no subtasks, and suggests decomposition.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    global JiraClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira large story decomposition reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira large story decomposition reminder.")
+        return "Jira large story decomposition reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+    story_points_field = settings.get("JIRA_STORY_POINTS_FIELD", "customfield_10016")
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_LARGE_STORY_DECOMPOSITION_REMINDER -->"
+
+    for project_key in tracked_projects:
+        try:
+            # Skip Epics and Sub-tasks
+            jql = f'project = "{project_key}" AND statusCategory != Done AND issuetype not in (Epic, Sub-task)'
+            issues = jira_client.search_issues(jql)
+
+            for issue in issues:
+                story_points = getattr(issue.fields, story_points_field, None)
+                try:
+                    if story_points is None:
+                        continue
+                    sp_value = float(story_points)
+                    if sp_value <= 8.0:
+                        continue
+                except ValueError:
+                    continue
+
+                subtasks = getattr(issue.fields, "subtasks", [])
+                if subtasks and len(subtasks) > 0:
+                    continue
+
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if already_reminded:
+                    continue
+
+                assignee_name = getattr(issue.fields.assignee, "displayName", "Assignee") if hasattr(issue.fields, "assignee") and issue.fields.assignee else "Assignee"
+                assignee_mention = f"[~{getattr(issue.fields.assignee, 'accountId', '')}]" if hasattr(issue.fields, "assignee") and getattr(issue.fields.assignee, "accountId", None) else assignee_name
+
+                prompt = (
+                    f"Ты - Agile Coach. Напиши вежливый комментарий (на русском языке) для "
+                    f"задачи {issue.key}. Упомяни {assignee_mention} и порекомендуй декомпозировать задачу на подзадачи (sub-tasks), "
+                    f"так как её оценка составляет {sp_value} Story Points, что является довольно большим размером для одной задачи без подзадач. "
+                    f"Без приветствий, просто текст."
+                )
+
+                resp = await llm.ainvoke([
+                    SystemMessage(content="Ты — технический ассистент, помогающий командам соблюдать agile-практики."),
+                    HumanMessage(content=prompt)
+                ])
+                comment_text = f"{reminder_marker}\n{resp.content.strip()}"
+
+                jira_client.add_comment(issue.key, comment_text)
+                logger.info(f"Posted large story decomposition reminder for Jira issue {issue.key}.")
+
+        except Exception as e:
+            logger.error(f"Error processing large story decomposition for project {project_key}: {e}")
+
+    return "Jira large story decomposition reminder task completed."

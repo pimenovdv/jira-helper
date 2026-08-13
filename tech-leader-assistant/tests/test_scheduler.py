@@ -18,6 +18,7 @@ async def test_scheduler_lifecycle():
     assert "jira_sync" in job_ids
     assert "opensearch_ingestion" in job_ids
     assert "confluence_auto_link" in job_ids
+    assert "jira_large_story_decomposition_reminder" in job_ids
 
     # Shutdown it
     shutdown_scheduler()
