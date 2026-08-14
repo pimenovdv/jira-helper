@@ -11,13 +11,13 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-27)
+### Completed Phases (1-28)
 - [x] Initial setup, UI dashboard, DB integrations. Jira/GitLab core sync logic and agentic RAG workflows.
 - [x] GitLab & Jira Automations (Summarization, linting, cleanup, reminders, summaries).
 - [x] Phases 24-27: Workflow enforcements, code quality notifications, stalled/blocked task reminders, missing assignments, metadata warnings and backlog tracking health.
+- [x] Phase 28: Issue & PR Maintenance (Decomposition, out-of-sprint warnings, description checklists).
 
-
-### Phase 28: Issue & PR Maintenance
-- [x] Jira Large Story Decomposition Reminder (Task > 8 SP without subtasks)
-- [ ] Jira High Priority Out of Sprint Reminder (Highest priority not in active sprint)
-- [ ] GitLab MR Description Checklist Validator (Checks if MR description contains a checklist if required)
+### Phase 29: Confluence & Knowledge Sync Integrations
+- [ ] Confluence Missing Page Tag Reminder (Notifies if a Confluence page is missing required tags/labels)
+- [ ] Neo4j Ghost Node Cleanup Task (Removes Jira/GitLab nodes in graph DB that no longer exist in sources)
+- [ ] OpenSearch Stale Document Expiration (Prunes old, inactive wiki chunks from RAG index)
