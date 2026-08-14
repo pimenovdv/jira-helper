@@ -2727,3 +2727,130 @@ async def jira_large_story_decomposition_reminder_task():
             logger.error(f"Error processing large story decomposition for project {project_key}: {e}")
 
     return "Jira large story decomposition reminder task completed."
+
+
+async def jira_high_priority_out_of_sprint_reminder_task():
+    """
+    Checks for Jira tasks with 'Highest' priority that are not in an active sprint
+    and notifies the assignee to plan them into a sprint or adjust priority.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    global JiraClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira high priority out of sprint reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira high priority out of sprint reminder.")
+        return "Jira high priority out of sprint reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_HIGH_PRIORITY_OUT_OF_SPRINT_REMINDER -->"
+
+    for project_key in tracked_projects:
+        try:
+            # Query for Highest priority tasks not in an active sprint and not done
+            jql = f'project = "{project_key}" AND priority = Highest AND (sprint is EMPTY OR sprint not in openSprints()) AND statusCategory != Done'
+            issues = jira_client.search_issues(jql)
+
+            for issue in issues:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                if already_reminded:
+                    continue
+
+                assignee = getattr(issue.fields, "assignee", None)
+                assignee_mention = f"[~accountid:{assignee.accountId}]" if assignee and hasattr(assignee, "accountId") else "Команда"
+
+                prompt = (
+                    f"Ты - Agile Coach. Напиши вежливый комментарий (на русском языке) для "
+                    f"задачи {issue.key}. Упомяни {assignee_mention} и обрати внимание, что задача имеет наивысший приоритет (Highest), "
+                    f"но не находится в активном спринте. Предложи взять ее в работу в текущем спринте или понизить приоритет, если она сейчас не актуальна. "
+                    f"Без приветствий, просто текст."
+                )
+
+                resp = await llm.ainvoke([
+                    SystemMessage(content="Ты — технический ассистент, помогающий командам соблюдать agile-практики."),
+                    HumanMessage(content=prompt)
+                ])
+                comment_text = f"{reminder_marker}\n{resp.content.strip()}"
+
+                jira_client.add_comment(issue.key, comment_text)
+                logger.info(f"Posted high priority out of sprint reminder for Jira issue {issue.key}.")
+
+        except Exception as e:
+            logger.error(f"Error processing high priority out of sprint reminder for project {project_key}: {e}")
+
+    return "Jira high priority out of sprint reminder task completed."
+
+
+async def gitlab_mr_description_checklist_validator_task():
+    """
+    Checks if open MRs contain a checklist in their description (either [ ] or [x]).
+    If not, posts a reminder to add a verification checklist.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR description checklist validator task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR checklist validator.")
+        return "GitLab MR description checklist validator task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_GITLAB_MR_CHECKLIST_VALIDATOR -->"
+
+    for gl_proj in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_mrs(gl_proj, state="opened")
+            for mr_data in mrs:
+                description = mr_data.get("description") or ""
+                # Check for Markdown checklist items
+                if "[ ]" in description or "[x]" in description.lower() or "[X]" in description:
+                    continue
+
+                mr_iid = mr_data.get("iid")
+                notes = gitlab_client.get_mr_notes(gl_proj, mr_iid)
+                already_reminded = any(reminder_marker in getattr(n, "body", "") for n in notes)
+
+                if already_reminded:
+                    continue
+
+                author = mr_data.get("author", {})
+                author_username = author.get("username", "")
+                mention = f"@{author_username}" if author_username else "Автор"
+
+                prompt = (
+                    f"Ты - Quality Assurance Lead. Напиши вежливый комментарий (на русском языке) для "
+                    f"Merge Request !{mr_iid}. Упомяни {mention} и обрати внимание, что в описании MR отсутствует "
+                    f"чек-лист для проверки (markdown формат [ ]). Попроси добавить чек-лист того, что нужно протестировать или проверить перед мержем. "
+                    f"Без приветствий, просто текст."
+                )
+
+                resp = await llm.ainvoke([
+                    SystemMessage(content="Ты — технический ассистент, помогающий командам соблюдать процессы разработки и тестирования."),
+                    HumanMessage(content=prompt)
+                ])
+                comment_text = f"{reminder_marker}\n{resp.content.strip()}"
+
+                gitlab_client.create_mr_note(gl_proj, mr_iid, comment_text)
+                logger.info(f"Posted missing checklist reminder for GitLab MR !{mr_iid} in project {gl_proj}.")
+
+        except Exception as e:
+            logger.error(f"Failed to process GitLab MR checklist validator for project {gl_proj}: {e}")
+
+    return "GitLab MR description checklist validator task completed."

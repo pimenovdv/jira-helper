@@ -19,6 +19,8 @@ async def test_scheduler_lifecycle():
     assert "opensearch_ingestion" in job_ids
     assert "confluence_auto_link" in job_ids
     assert "jira_large_story_decomposition_reminder" in job_ids
+    assert "jira_high_priority_out_of_sprint_reminder" in job_ids
+    assert "gitlab_mr_description_checklist_validator" in job_ids
 
     # Shutdown it
     shutdown_scheduler()
