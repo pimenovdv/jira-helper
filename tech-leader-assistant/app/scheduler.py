@@ -7,6 +7,7 @@ from .tasks import (
     jira_sync_task,
     opensearch_ingestion_task,
     confluence_auto_link_task,
+    confluence_missing_page_tag_reminder_task,
     generate_release_notes_task,
     stale_mr_reminder_task,
     stale_jira_task_reminder_task,
@@ -60,6 +61,9 @@ def setup_scheduler():
 
     # 4. Confluence auto-linking (e.g., every hour)
     scheduler.add_job(confluence_auto_link_task, 'interval', hours=1, id="confluence_auto_link")
+
+    # Confluence missing page tag reminder (e.g., daily)
+    scheduler.add_job(confluence_missing_page_tag_reminder_task, 'cron', hour=4, minute=0, id="confluence_missing_page_tag_reminder")
 
     scheduler.add_job(generate_release_notes_task, 'cron', hour=2, minute=0, id="generate_release_notes")
 

@@ -414,6 +414,95 @@ async def confluence_auto_link_task():
     return "Confluence auto-linking task completed"
 
 
+
+async def confluence_missing_page_tag_reminder_task():
+    """
+    Notifies if a Confluence page is missing required tags/labels.
+    Uses the LLM to generate a polite reminder in Russian and posts it as a comment.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Confluence missing page tag reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Confluence missing page tag reminder.")
+        return "Confluence missing page tag reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    confluence_client = ConfluenceClient()
+
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+    tracked_spaces = [s.strip() for s in tracked_spaces if s.strip()]
+
+    required_tags_str = settings.get("CONFLUENCE_REQUIRED_TAGS", "")
+    if not required_tags_str:
+        logger.info("No CONFLUENCE_REQUIRED_TAGS configured. Skipping task.")
+        return "Confluence missing page tag reminder task skipped (no required tags configured)"
+
+    required_tags = [t.strip().lower() for t in required_tags_str.split(",") if t.strip()]
+
+    marker = "<!-- AUTO_GENERATED_CONFLUENCE_TAG_REMINDER -->"
+
+    for space in tracked_spaces:
+        try:
+            pages_response = confluence_client.client.get_all_pages_from_space(space, start=0, limit=100)
+            pages = []
+            if isinstance(pages_response, list):
+                pages = pages_response
+            elif isinstance(pages_response, dict) and "results" in pages_response:
+                pages = pages_response["results"]
+
+            for page in pages:
+                page_id = page["id"]
+                title = page.get("title", f"Page {page_id}")
+
+                # Fetch labels
+                labels_response = confluence_client.client.get_page_labels(page_id)
+                page_labels = []
+                if isinstance(labels_response, dict) and "results" in labels_response:
+                    page_labels = [l.get("name", "").lower() for l in labels_response["results"]]
+
+                missing_tags = [t for t in required_tags if t not in page_labels]
+
+                if missing_tags:
+                    # Check if reminder already exists
+                    comments_response = confluence_client.client.get_page_comments(page_id, expand="body.storage")
+                    comments = []
+                    if isinstance(comments_response, dict) and "results" in comments_response:
+                        comments = comments_response["results"]
+
+                    already_reminded = False
+                    for comment in comments:
+                        body = comment.get("body", {}).get("storage", {}).get("value", "")
+                        if marker in body:
+                            already_reminded = True
+                            break
+
+                    if not already_reminded:
+                        missing_tags_str = ", ".join(missing_tags)
+                        logger.info(f"Page '{title}' ({page_id}) is missing tags: {missing_tags_str}. Generating reminder.")
+                        prompt = (
+                            f"Сгенерируй короткое и вежливое напоминание (в 1-2 предложениях) автору страницы в Confluence '{title}', "
+                            f"о том, что на странице не хватает обязательных тегов: {missing_tags_str}. "
+                            f"Попроси добавить их. "
+                            f"Верни только текст напоминания, без кавычек и дополнительных пояснений."
+                        )
+                        response = await llm.ainvoke([HumanMessage(content=prompt)])
+                        comment_body = f"{response.content}<br/>{marker}"
+                        try:
+                            confluence_client.client.add_comment(page_id, comment_body)
+                            logger.info(f"Posted reminder to page '{title}' ({page_id}).")
+                        except Exception as e:
+                            logger.error(f"Failed to post reminder to page '{title}': {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing space {space}: {e}")
+
+    return "Confluence missing page tag reminder task completed."
+
 def generate_release_notes_task():
     """Fetches Jira releases, gets context from OpenSearch, drafts release notes, and publishes to Confluence."""
     logger.info("Running automated release notes generator task.")
