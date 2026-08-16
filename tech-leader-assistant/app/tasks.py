@@ -503,6 +503,37 @@ async def confluence_missing_page_tag_reminder_task():
 
     return "Confluence missing page tag reminder task completed."
 
+async def neo4j_ghost_node_cleanup_task():
+    """Removes Jira/GitLab nodes in graph DB that no longer exist in sources."""
+    logger.info("Running Neo4j ghost node cleanup task.")
+
+    jira_client = JiraClient()
+    neo4j_client = Neo4jClient()
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [pid.strip() for pid in tracked_projects if pid.strip()]
+
+    jira_projects_setting = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    jira_projects = [j_proj.strip() for j_proj in jira_projects_setting if j_proj.strip()]
+
+    active_tasks = []
+    active_releases = []
+
+    for j_proj in jira_projects:
+        issues = jira_client.search_issues(f"project = {j_proj} AND (sprint in openSprints() OR updated >= -30d)")
+        active_tasks.extend([issue.key for issue in issues])
+
+        releases = jira_client.get_project_versions(j_proj)
+        active_releases.extend([getattr(release, "name", release) for release in releases])
+
+    all_active_projects = gitlab_projects + jira_projects
+
+    # Add ghost node cleanup call
+    neo4j_client.cleanup_ghost_nodes(active_tasks, active_releases, all_active_projects)
+
+    logger.info("Neo4j ghost node cleanup task completed.")
+    return "Neo4j ghost node cleanup task completed."
+
 def generate_release_notes_task():
     """Fetches Jira releases, gets context from OpenSearch, drafts release notes, and publishes to Confluence."""
     logger.info("Running automated release notes generator task.")
