@@ -1351,3 +1351,41 @@ async def test_jira_large_story_decomposition_reminder_task(mocker):
     assert args[0] == "PROJ1-123"
     assert "AUTO_GENERATED_JIRA_LARGE_STORY_DECOMPOSITION_REMINDER" in args[1]
     assert "Декомпозируйте задачу" in args[1]
+
+@pytest.mark.asyncio
+async def test_neo4j_ghost_node_cleanup_task(mocker, mock_settings):
+    """Tests neo4j_ghost_node_cleanup_task removes ghost nodes."""
+    def mock_settings_get(key, default=""):
+        if key == "GITLAB_TRACKED_PROJECTS":
+            return "1, 2"
+        elif key == "JIRA_TRACKED_PROJECTS":
+            return "PROJ1"
+        return default
+
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    mock_jira_client = mocker.patch('app.tasks.JiraClient')
+    mock_neo4j_client = mocker.patch('app.tasks.Neo4jClient')
+
+    instance = mock_jira_client.return_value
+    neo4j_instance = mock_neo4j_client.return_value
+
+    mock_issue = mocker.Mock()
+    mock_issue.key = "PROJ1-123"
+    instance.search_issues.return_value = [mock_issue]
+
+    mock_release = mocker.Mock()
+    mock_release.name = "v1.0.0"
+    instance.get_project_versions.return_value = [mock_release]
+
+    from app.tasks import neo4j_ghost_node_cleanup_task
+    result = await neo4j_ghost_node_cleanup_task()
+
+    assert result == "Neo4j ghost node cleanup task completed."
+
+    neo4j_instance.cleanup_ghost_nodes.assert_called_once_with(
+        ["PROJ1-123"],
+        ["v1.0.0"],
+        ["1", "2", "PROJ1"]
+    )
