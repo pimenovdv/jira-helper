@@ -237,6 +237,72 @@ def test_opensearch_ingestion_task(mocker):
     mock_os_search.from_documents.assert_called_once()
 
 
+
+def test_opensearch_stale_document_expiration_task(mocker):
+    # Mock settings
+    def mock_settings_get(key, default=""):
+        if key == "CONFLUENCE_TRACKED_SPACES":
+            return "SPACE1"
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    # Mock ConfluenceClient
+    mock_confluence_client_cls = mocker.patch('app.tasks.ConfluenceClient')
+    mock_confluence = mock_confluence_client_cls.return_value
+    mock_confluence.client.get_all_pages_from_space.return_value = [
+        {"id": "123", "title": "Doc 1"},
+        {"id": "456", "title": "Doc 2"}
+    ]
+
+    # Mock OpenSearchClient
+    mock_os_client_cls = mocker.patch('app.tasks.OpenSearchClient')
+    mock_os = mock_os_client_cls.return_value
+    mock_os.client.delete_by_query.return_value = {"deleted": 5}
+
+    from app.tasks import opensearch_stale_document_expiration_task
+    result = opensearch_stale_document_expiration_task()
+
+    assert result == "Stale document expiration completed"
+    mock_os.client.delete_by_query.assert_called_once()
+    call_args = mock_os.client.delete_by_query.call_args[1]
+    assert call_args["index"] == "confluence-rag-index"
+
+    # Extract active_page_ids from the mocked call
+    must_not = call_args["body"]["query"]["bool"]["must_not"][0]
+    terms_ids = must_not["terms"]["metadata.page_id.keyword"]
+    assert "123" in terms_ids
+    assert "456" in terms_ids
+
+
+def test_opensearch_stale_document_expiration_task_no_pages(mocker):
+    # Mock settings
+    def mock_settings_get(key, default=""):
+        if key == "CONFLUENCE_TRACKED_SPACES":
+            return "SPACE1"
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    # Mock ConfluenceClient
+    mock_confluence_client_cls = mocker.patch('app.tasks.ConfluenceClient')
+    mock_confluence = mock_confluence_client_cls.return_value
+    mock_confluence.client.get_all_pages_from_space.return_value = []
+
+    # Mock OpenSearchClient
+    mock_os_client_cls = mocker.patch('app.tasks.OpenSearchClient')
+
+    from app.tasks import opensearch_stale_document_expiration_task
+    result = opensearch_stale_document_expiration_task()
+
+    assert result == "Stale document expiration skipped (no active pages)"
+    mock_os_client_cls.return_value.client.delete_by_query.assert_not_called()
+
+
 def test_generate_release_notes_task(mocker):
     # Mock settings
     def mock_settings_get(key, default=""):
@@ -1389,3 +1455,53 @@ async def test_neo4j_ghost_node_cleanup_task(mocker, mock_settings):
         ["v1.0.0"],
         ["1", "2", "PROJ1"]
     )
+
+
+@pytest.mark.asyncio
+async def test_gitlab_mr_code_churn_notifier_task(mocker):
+    # Mock settings
+    def mock_settings_get(key, default=""):
+        if key == "GITLAB_TRACKED_PROJECTS":
+            return "123"
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch('app.tasks.settings', mock_settings)
+
+    # Mock GitLabClient
+    mock_gitlab_client_cls = mocker.patch('app.tasks.GitLabClient')
+    mock_gl = mock_gitlab_client_cls.return_value
+
+    mock_project = mocker.MagicMock()
+    mock_mr = mocker.MagicMock()
+    mock_mr.iid = 1
+    mock_mr.labels = []
+
+    mock_mr.changes.return_value = {
+        "changes": [
+            {
+                "diff": "+line1\n+line2\n-line3"
+            }
+        ]
+    }
+    mock_note = mocker.MagicMock()
+    mock_note.body = "Some comment"
+    mock_mr.notes.list.return_value = [mock_note]
+
+    mock_project.mergerequests.list.return_value = [mock_mr]
+    mock_gl.client.projects.get.return_value = mock_project
+
+    from app.tasks import gitlab_mr_code_churn_notifier_task
+
+    # We will temporarily change threshold to test it triggers with low churn
+    # Actually, we can just supply a large diff
+    diff_lines = "\n".join(["+line" for _ in range(1005)])
+    mock_mr.changes.return_value = {"changes": [{"diff": diff_lines}]}
+
+    result = await gitlab_mr_code_churn_notifier_task()
+
+    assert result == "Code churn alert task completed"
+    mock_gl.update_mr_labels.assert_called_once_with("123", 1, ["high-churn"])
+    mock_gl.create_mr_note.assert_called_once()
+    assert "Code Churn Alert" in mock_gl.create_mr_note.call_args[0][2]

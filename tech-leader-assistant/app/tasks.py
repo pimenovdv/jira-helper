@@ -13,6 +13,7 @@ from app.clients.gitlab_client import GitLabClient
 from app.clients.jira_client import JiraClient
 from app.clients import settings
 from app.clients.confluence_client import ConfluenceClient
+from app.clients.opensearch_client import OpenSearchClient
 from app.clients.neo4j_client import Neo4jClient
 
 global GitLabClient, settings
@@ -335,6 +336,72 @@ def opensearch_ingestion_task():
         return "OpenSearch ingestion task failed"
 
     return "OpenSearch ingestion task completed"
+
+def opensearch_stale_document_expiration_task():
+    """Prunes old, inactive wiki chunks from RAG index if the page no longer exists or is untracked."""
+    logger.info("Running OpenSearch Stale Document Expiration task.")
+
+    confluence_client = ConfluenceClient()
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+
+    active_page_ids = []
+    for space in tracked_spaces:
+        space = space.strip()
+        if not space: continue
+        try:
+            pages = confluence_client.client.get_all_pages_from_space(
+                space,
+                start=0,
+                limit=500
+            )
+            if isinstance(pages, list):
+                active_page_ids.extend([str(p.get("id")) for p in pages])
+            elif isinstance(pages, dict) and "results" in pages:
+                active_page_ids.extend([str(p.get("id")) for p in pages["results"]])
+        except Exception as e:
+            logger.error(f"Error fetching pages for space {space} in stale document expiration: {e}")
+
+    if not active_page_ids:
+        logger.info("No active pages found or tracked spaces empty. Skipping stale document pruning.")
+        return "Stale document expiration skipped (no active pages)"
+
+    os_client = OpenSearchClient()
+
+    query = {
+        "query": {
+            "bool": {
+                "must_not": [
+                    {
+                        "terms": {
+                            "metadata.page_id.keyword": active_page_ids
+                        }
+                    }
+                ],
+                "filter": [
+                    {
+                        "term": {
+                            "metadata.source.keyword": "confluence"
+                        }
+                    }
+                ]
+            }
+        }
+    }
+
+    try:
+        response = os_client.client.delete_by_query(
+            index="confluence-rag-index",
+            body=query,
+            conflicts="proceed"
+        )
+        deleted = response.get("deleted", 0)
+        logger.info(f"Successfully pruned {deleted} stale documents from OpenSearch.")
+    except Exception as e:
+        logger.error(f"Error during OpenSearch stale document expiration: {e}")
+        return "Stale document expiration failed"
+
+    return "Stale document expiration completed"
+
 async def confluence_auto_link_task():
     """Automatically linking Confluence pages to Git projects based on titles."""
     logger.info("Running Confluence auto-linking task: linking pages to Git projects.")
@@ -2974,3 +3041,62 @@ async def gitlab_mr_description_checklist_validator_task():
             logger.error(f"Failed to process GitLab MR checklist validator for project {gl_proj}: {e}")
 
     return "GitLab MR description checklist validator task completed."
+
+
+async def gitlab_mr_code_churn_notifier_task():
+    """Alerts when an MR introduces significant code churn > 1000 lines."""
+    logger.info("Running GitLab Code Churn Alert task.")
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+
+    if not tracked_projects or tracked_projects == [""]:
+        return "Code churn alert task skipped (no projects tracked)"
+
+    threshold = 1000
+
+    for project_id in tracked_projects:
+        project_id = project_id.strip()
+        if not project_id:
+            continue
+
+        try:
+            mrs = gitlab_client.client.projects.get(project_id).mergerequests.list(state='opened', get_all=True)
+            for mr in mrs:
+                try:
+                    changes = mr.changes()
+
+                    churn = 0
+                    if changes and "changes" in changes:
+                        for change in changes["changes"]:
+                            diff = change.get("diff", "")
+                            # Count lines starting with + or - (but not +++ or ---)
+                            lines = diff.split('\n')
+                            for line in lines:
+                                if line.startswith('+') and not line.startswith('+++'):
+                                    churn += 1
+                                elif line.startswith('-') and not line.startswith('---'):
+                                    churn += 1
+
+                    if churn > threshold:
+                        # Check labels
+                        labels = mr.labels
+                        if "high-churn" not in labels:
+                            labels.append("high-churn")
+                            gitlab_client.update_mr_labels(project_id, mr.iid, labels)
+
+                        # Check comments to prevent duplicates
+                        notes = mr.notes.list(all=True)
+                        marker = "<!-- AUTO_GENERATED_CHURN_ALERT -->"
+                        already_commented = any(marker in getattr(n, 'body', '') for n in notes)
+
+                        if not already_commented:
+                            body = f"{marker}\n**Code Churn Alert**: This MR introduces significant code churn ({churn} additions/deletions). Please consider breaking it down into smaller, more manageable MRs to ease review."
+                            gitlab_client.create_mr_note(project_id, mr.iid, body)
+
+                except Exception as e:
+                    logger.error(f"Error checking churn for MR {mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error checking open MRs for project {project_id}: {e}")
+
+    return "Code churn alert task completed"

@@ -11,13 +11,14 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-28)
+### Completed Phases (1-29)
 - [x] Initial setup, UI dashboard, DB integrations. Jira/GitLab core sync logic and agentic RAG workflows.
 - [x] GitLab & Jira Automations (Summarization, linting, cleanup, reminders, summaries).
-- [x] Phases 24-27: Workflow enforcements, code quality notifications, stalled/blocked task reminders, missing assignments, metadata warnings and backlog tracking health.
-- [x] Phase 28: Issue & PR Maintenance (Decomposition, out-of-sprint warnings, description checklists).
+- [x] Workflow enforcements, code quality notifications, stalled/blocked task reminders, missing assignments, metadata warnings and backlog tracking health.
+- [x] Issue & PR Maintenance (Decomposition, out-of-sprint warnings, description checklists).
+- [x] Confluence & Knowledge Sync Integrations (Confluence tags, Neo4j ghost cleanup, OpenSearch expiration).
 
-### Phase 29: Confluence & Knowledge Sync Integrations
-- [x] Confluence Missing Page Tag Reminder (Notifies if a Confluence page is missing required tags/labels)
-- [x] Neo4j Ghost Node Cleanup Task (Removes Jira/GitLab nodes in graph DB that no longer exist in sources)
-- [ ] OpenSearch Stale Document Expiration (Prunes old, inactive wiki chunks from RAG index)
+### Phase 30: Analytics & Code Health
+- [x] GitLab Code Churn Alert (Alerts when an MR introduces significant code churn > 1000 lines)
+- [ ] Jira Stale Epic Reminder (Notifies if an Epic hasn't seen updates for a long time)
+- [ ] Confluence Author Summary (Generates periodic summary of recently contributed pages by author)
