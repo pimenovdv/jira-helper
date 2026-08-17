@@ -6,6 +6,7 @@ from .tasks import (
     gitlab_sync_task,
     jira_sync_task,
     opensearch_ingestion_task,
+    opensearch_stale_document_expiration_task,
     confluence_auto_link_task,
     confluence_missing_page_tag_reminder_task,
     neo4j_ghost_node_cleanup_task,
@@ -40,7 +41,8 @@ from .tasks import (
     gitlab_stale_draft_mr_closer_task,
     jira_large_story_decomposition_reminder_task,
     jira_high_priority_out_of_sprint_reminder_task,
-    gitlab_mr_description_checklist_validator_task
+    gitlab_mr_description_checklist_validator_task,
+    gitlab_mr_code_churn_notifier_task
 )
 import logging
 
@@ -59,6 +61,7 @@ def setup_scheduler():
 
     # 3. OpenSearch ingestion for RAG (e.g., daily at midnight)
     scheduler.add_job(opensearch_ingestion_task, 'cron', hour=0, minute=0, id="opensearch_ingestion")
+    scheduler.add_job(opensearch_stale_document_expiration_task, 'cron', hour=1, minute=0, id="opensearch_stale_document_expiration")
 
     # 4. Confluence auto-linking (e.g., every hour)
     scheduler.add_job(confluence_auto_link_task, 'interval', hours=1, id="confluence_auto_link")
@@ -117,6 +120,7 @@ def setup_scheduler():
     scheduler.add_job(jira_large_story_decomposition_reminder_task, 'cron', hour='*/6', minute=15, id="jira_large_story_decomposition_reminder")
     scheduler.add_job(jira_high_priority_out_of_sprint_reminder_task, 'cron', hour='*/4', minute=30, id="jira_high_priority_out_of_sprint_reminder")
     scheduler.add_job(gitlab_mr_description_checklist_validator_task, 'cron', hour='*/3', minute=45, id="gitlab_mr_description_checklist_validator")
+    scheduler.add_job(gitlab_mr_code_churn_notifier_task, 'cron', hour='*/4', minute=15, id="gitlab_mr_code_churn_notifier")
 
     logger.info("APScheduler jobs configured.")
 
