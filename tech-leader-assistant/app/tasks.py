@@ -3100,3 +3100,63 @@ async def gitlab_mr_code_churn_notifier_task():
             logger.error(f"Error checking open MRs for project {project_id}: {e}")
 
     return "Code churn alert task completed"
+
+async def jira_stale_epic_reminder_task():
+    """
+    Checks for Jira Epics that have not been updated for 30 days and are not in 'Done' status.
+    Generates an automated reminder using LLM to update or close the epic.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    global JiraClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira stale epic reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira stale epic reminder.")
+        return "Jira stale epic reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_STALE_EPIC_REMINDER -->"
+
+    for project_key in tracked_projects:
+        try:
+            # Query for Epics not updated in 30 days and not Done
+            jql = f'project = "{project_key}" AND issuetype = Epic AND statusCategory != Done AND updated <= -30d'
+            issues = jira_client.search_issues(jql)
+
+            for issue in issues:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                if already_reminded:
+                    continue
+
+                assignee = getattr(issue.fields, "assignee", None)
+                assignee_mention = f"[~accountid:{assignee.accountId}]" if assignee and hasattr(assignee, "accountId") else "Команда"
+
+                prompt = (
+                    f"Ты - Agile Coach. Напиши вежливый комментарий (на русском языке) для "
+                    f"Эпика {issue.key}. Упомяни {assignee_mention} и обрати внимание, что этот эпик не обновлялся "
+                    f"уже более 30 дней. Предложи актуализировать статус, добавить комментарий о прогрессе или закрыть его, если он больше не актуален. "
+                    f"Без приветствий, просто текст."
+                )
+
+                resp = await llm.ainvoke([
+                    SystemMessage(content="Ты — технический ассистент, помогающий командам соблюдать agile-практики."),
+                    HumanMessage(content=prompt)
+                ])
+                comment_text = f"{reminder_marker}\n{resp.content.strip()}"
+
+                jira_client.add_comment(issue.key, comment_text)
+                logger.info(f"Posted stale epic reminder for Jira issue {issue.key}.")
+
+        except Exception as e:
+            logger.error(f"Error processing stale epic reminder for project {project_key}: {e}")
+
+    return "Jira stale epic reminder task completed."
