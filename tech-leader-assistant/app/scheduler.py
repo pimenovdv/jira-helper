@@ -42,7 +42,8 @@ from .tasks import (
     jira_large_story_decomposition_reminder_task,
     jira_high_priority_out_of_sprint_reminder_task,
     gitlab_mr_description_checklist_validator_task,
-    gitlab_mr_code_churn_notifier_task
+    gitlab_mr_code_churn_notifier_task,
+    jira_stale_epic_reminder_task
 )
 import logging
 
@@ -121,6 +122,7 @@ def setup_scheduler():
     scheduler.add_job(jira_high_priority_out_of_sprint_reminder_task, 'cron', hour='*/4', minute=30, id="jira_high_priority_out_of_sprint_reminder")
     scheduler.add_job(gitlab_mr_description_checklist_validator_task, 'cron', hour='*/3', minute=45, id="gitlab_mr_description_checklist_validator")
     scheduler.add_job(gitlab_mr_code_churn_notifier_task, 'cron', hour='*/4', minute=15, id="gitlab_mr_code_churn_notifier")
+    scheduler.add_job(jira_stale_epic_reminder_task, 'cron', hour=10, minute=30, id="jira_stale_epic_reminder")
 
     logger.info("APScheduler jobs configured.")
 

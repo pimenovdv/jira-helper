@@ -1505,3 +1505,67 @@ async def test_gitlab_mr_code_churn_notifier_task(mocker):
     mock_gl.update_mr_labels.assert_called_once_with("123", 1, ["high-churn"])
     mock_gl.create_mr_note.assert_called_once()
     assert "Code Churn Alert" in mock_gl.create_mr_note.call_args[0][2]
+
+@pytest.mark.asyncio
+async def test_jira_stale_epic_reminder_task(mocker, mock_settings):
+    from app.tasks import jira_stale_epic_reminder_task
+
+    mock_settings.get.side_effect = lambda k, d="": "TEST-KEY" if k == "JIRA_TRACKED_PROJECTS" else ("test-key" if k == "OPENAI_API_KEY" else d)
+
+    mock_jira = mocker.MagicMock()
+    mocker.patch("app.tasks.JiraClient", return_value=mock_jira)
+
+    mock_llm = mocker.MagicMock()
+    mock_response = mocker.MagicMock()
+    mock_response.content = "Please update this epic."
+    mock_llm.ainvoke = mocker.AsyncMock(return_value=mock_response)
+    mocker.patch("app.tasks.ChatOpenAI", return_value=mock_llm)
+
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "TEST-123"
+    mock_issue.fields.assignee.accountId = "user123"
+    mock_jira.search_issues.return_value = [mock_issue]
+
+    mock_jira.get_comments.return_value = []
+
+    res = await jira_stale_epic_reminder_task()
+
+    assert res == "Jira stale epic reminder task completed."
+    mock_jira.search_issues.assert_called_once_with('project = "TEST-KEY" AND issuetype = Epic AND statusCategory != Done AND updated <= -30d')
+    mock_llm.ainvoke.assert_awaited_once()
+    mock_jira.add_comment.assert_called_once_with("TEST-123", "<!-- AUTO_GENERATED_JIRA_STALE_EPIC_REMINDER -->\nPlease update this epic.")
+
+@pytest.mark.asyncio
+async def test_jira_stale_epic_reminder_task_already_reminded(mocker, mock_settings):
+    from app.tasks import jira_stale_epic_reminder_task
+
+    mock_settings.get.side_effect = lambda k, d="": "TEST-KEY" if k == "JIRA_TRACKED_PROJECTS" else ("test-key" if k == "OPENAI_API_KEY" else d)
+
+    mock_jira = mocker.MagicMock()
+    mocker.patch("app.tasks.JiraClient", return_value=mock_jira)
+
+    mock_llm = mocker.MagicMock()
+    mocker.patch("app.tasks.ChatOpenAI", return_value=mock_llm)
+
+    mock_issue = mocker.MagicMock()
+    mock_issue.key = "TEST-123"
+    mock_jira.search_issues.return_value = [mock_issue]
+
+    mock_comment = mocker.MagicMock()
+    mock_comment.body = "<!-- AUTO_GENERATED_JIRA_STALE_EPIC_REMINDER -->\nAlready reminded"
+    mock_jira.get_comments.return_value = [mock_comment]
+
+    res = await jira_stale_epic_reminder_task()
+
+    assert res == "Jira stale epic reminder task completed."
+    mock_llm.ainvoke.assert_not_called()
+    mock_jira.add_comment.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_jira_stale_epic_reminder_task_no_api_key(mocker, mock_settings):
+    from app.tasks import jira_stale_epic_reminder_task
+
+    mock_settings.get.side_effect = lambda k, d="": "TEST-KEY" if k == "JIRA_TRACKED_PROJECTS" else ("" if k == "OPENAI_API_KEY" else d)
+
+    res = await jira_stale_epic_reminder_task()
+    assert res == "Jira stale epic reminder task skipped (no OpenAI API key)"

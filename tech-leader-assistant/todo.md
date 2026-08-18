@@ -20,5 +20,5 @@
 
 ### Phase 30: Analytics & Code Health
 - [x] GitLab Code Churn Alert (Alerts when an MR introduces significant code churn > 1000 lines)
-- [ ] Jira Stale Epic Reminder (Notifies if an Epic hasn't seen updates for a long time)
+- [x] Jira Stale Epic Reminder (Notifies if an Epic hasn't seen updates for a long time)
 - [ ] Confluence Author Summary (Generates periodic summary of recently contributed pages by author)
