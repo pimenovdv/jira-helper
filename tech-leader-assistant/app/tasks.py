@@ -11,12 +11,12 @@ from datetime import datetime
 from sqlalchemy import select
 from app.clients.gitlab_client import GitLabClient
 from app.clients.jira_client import JiraClient
-from app.clients import settings
 from app.clients.confluence_client import ConfluenceClient
 from app.clients.opensearch_client import OpenSearchClient
 from app.clients.neo4j_client import Neo4jClient
 
-global GitLabClient, settings
+global GitLabClient
+from app.clients import settings
 from app.database import AsyncSessionLocal
 from app.models import Event
 
@@ -2727,7 +2727,8 @@ async def gitlab_stale_draft_mr_closer_task():
     import logging
     from datetime import datetime, timezone
     import dateutil.parser
-    global GitLabClient, settings
+    global GitLabClient
+    from app.clients import settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting automated GitLab stale draft MR closer task...")
@@ -3160,3 +3161,118 @@ async def jira_stale_epic_reminder_task():
             logger.error(f"Error processing stale epic reminder for project {project_key}: {e}")
 
     return "Jira stale epic reminder task completed."
+async def confluence_author_summary_task():
+    """
+    Generates a periodic summary of recently contributed Confluence pages grouped by author.
+    Generates an HTML report in Russian via LLM and publishes it to Confluence.
+    """
+    from app.clients import settings
+    from app.clients.confluence_client import ConfluenceClient
+    from langchain_openai import ChatOpenAI
+    import logging
+    from langchain_core.messages import HumanMessage
+    from datetime import datetime, timezone, timedelta
+    from collections import defaultdict
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Confluence author summary task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Confluence author summary.")
+        return "Confluence author summary task skipped (no OpenAI API key)"
+
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+    tracked_spaces = [s.strip() for s in tracked_spaces if s.strip()]
+
+    if not tracked_spaces:
+        logger.info("No CONFLUENCE_TRACKED_SPACES configured. Skipping task.")
+        return "Confluence author summary task skipped (no spaces configured)"
+
+    space = tracked_spaces[0]
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    confluence_client = ConfluenceClient()
+
+    # Get recent pages (e.g., from the last 7 days)
+    now = datetime.now(timezone.utc)
+    one_week_ago = now - timedelta(days=7)
+
+    author_pages = defaultdict(list)
+
+    try:
+        pages_response = confluence_client.client.get_all_pages_from_space(space, expand="version", start=0, limit=100)
+        pages = []
+        if isinstance(pages_response, list):
+            pages = pages_response
+        elif isinstance(pages_response, dict) and "results" in pages_response:
+            pages = pages_response["results"]
+
+        for page in pages:
+            version_info = page.get("version", {})
+            when_str = version_info.get("when")
+            if when_str:
+                try:
+                    # Parse Confluence date, e.g. "2023-10-10T12:00:00.000+0000"
+                    when_dt = datetime.strptime(when_str[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+                    if when_dt >= one_week_ago:
+                        by = version_info.get("by", {})
+                        author_name = by.get("displayName") or by.get("username") or "Unknown Author"
+                        title = page.get("title", "Untitled")
+                        # You could also gather the link here
+                        base_url = confluence_client.client.url
+                        link = f"{base_url}/spaces/{space}/pages/{page.get('id')}"
+                        author_pages[author_name].append({"title": title, "link": link})
+                except Exception as e:
+                    logger.error(f"Error parsing date {when_str}: {e}")
+                    pass
+
+    except Exception as e:
+        logger.error(f"Error fetching pages for space {space}: {e}")
+        return f"Confluence author summary task failed: {e}"
+
+    if not author_pages:
+        logger.info("No recent contributions found.")
+        return "Confluence author summary task completed (no recent contributions)"
+
+    # Build context for LLM
+    context_lines = []
+    for author, pages in author_pages.items():
+        context_lines.append(f"Автор: {author}")
+        for p in pages:
+            context_lines.append(f" - Страница: {p['title']} ({p['link']})")
+        context_lines.append("")
+
+    context_text = "\n".join(context_lines)
+
+    prompt = (
+        f"Сгенерируй красивый HTML-отчет (без тегов <html> или markdown блоков, только содержимое) "
+        f"на русском языке, summarizing недавние обновления страниц Confluence по авторам.\n\n"
+        f"Данные:\n{context_text}\n\n"
+        f"Отчет должен быть структурированным, дружелюбным и поощрять авторов за их вклад."
+    )
+
+    try:
+        response = await llm.ainvoke([HumanMessage(content=prompt)])
+        html_content = response.content.strip()
+
+        # Clean up markdown if llm included it
+        if html_content.startswith("```html"):
+            html_content = html_content[7:]
+            if html_content.endswith("```"):
+                html_content = html_content[:-3]
+
+        title = f"Сводка активности авторов: {datetime.now().strftime('%Y-%m-%d')}"
+
+        confluence_client.client.create_page(
+            space=space,
+            title=title,
+            body=html_content.strip(),
+            parent_id=None
+        )
+        logger.info(f"Published Confluence author summary to space {space}.")
+    except Exception as e:
+        logger.error(f"Failed to generate or publish Confluence author summary: {e}")
+        return f"Confluence author summary task failed: {e}"
+
+    return "Confluence author summary task completed"
