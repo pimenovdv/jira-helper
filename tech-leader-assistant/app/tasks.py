@@ -3161,6 +3161,65 @@ async def jira_stale_epic_reminder_task():
             logger.error(f"Error processing stale epic reminder for project {project_key}: {e}")
 
     return "Jira stale epic reminder task completed."
+async def gitlab_mr_missing_labels_notifier_task():
+    """
+    Checks tracked GitLab projects for open Merge Requests that have no labels.
+    If no labels are found, generates an automated message asking the author to add labels.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab MR missing labels notifier task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR missing labels notifier.")
+        return "GitLab MR missing labels notifier task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_GITLAB_MISSING_LABELS_REMINDER -->"
+
+    for project_id in tracked_projects:
+        try:
+            project = gitlab_client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state="opened", all=True)
+
+            for mr in mrs:
+                try:
+                    labels = list(getattr(mr, "labels", []))
+                    if not labels:
+                        # Check if we already posted a reminder
+                        notes = mr.notes.list(all=True)
+                        already_notified = any(reminder_marker in note.body for note in notes)
+
+                        if not already_notified:
+                            author_username = mr.author.get("username", "author") if hasattr(mr, "author") and isinstance(mr.author, dict) else "author"
+                            author_mention = f"@{author_username}"
+
+                            prompt = (
+                                f"Напиши короткое, вежливое сообщение (2-3 предложения) для автора Merge Request {mr.iid}, "
+                                f"упомянув его ({author_mention}). Напомни, что в MR отсутствуют метки (labels), "
+                                "и попроси добавить подходящие метки для правильной категоризации. "
+                                "Пиши на русском языке без приветствия."
+                            )
+                            response = await llm.ainvoke([HumanMessage(content=prompt)])
+                            comment_body = f"{response.content}\n\n{reminder_marker}"
+
+                            gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+                            logger.info(f"Posted missing labels reminder for MR {mr.iid} in project {project_id}.")
+                except Exception as e:
+                    logger.error(f"Error processing MR {mr.iid} in project {project_id} for missing labels notifier: {e}")
+        except Exception as e:
+            logger.error(f"Error processing missing labels notifier for project {project_id}: {e}")
+
+    return "GitLab MR missing labels notifier task completed."
+
+
 async def confluence_author_summary_task():
     """
     Generates a periodic summary of recently contributed Confluence pages grouped by author.
