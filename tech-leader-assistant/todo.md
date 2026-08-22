@@ -11,10 +11,11 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-30)
+### Completed Phases (1-31)
 - [x] Initial setup, core sync (Jira/GitLab), DB, agentic RAG workflows.
 - [x] Comprehensive automations, workflow enforcements, metadata warnings, issue/PR maintenance, and Confluence sync.
 - [x] Code Health & Analytics (Code Churn Alerts, Stale Epic Reminders, Confluence Author Summaries).
-
-### Phase 31: Advanced Quality & Stale Tracking
 - [x] GitLab MR Missing Labels Notifier (Notifies authors if their open MR has no labels)
+
+### Phase 32: Confluence Stale Page Tracking
+- [x] Confluence Stale Page Reminder Task (Notifies authors of pages not updated in > 180 days to review relevance)

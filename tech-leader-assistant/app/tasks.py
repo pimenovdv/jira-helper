@@ -3335,3 +3335,89 @@ async def confluence_author_summary_task():
         return f"Confluence author summary task failed: {e}"
 
     return "Confluence author summary task completed"
+
+async def confluence_stale_page_reminder_task():
+    """
+    Checks tracked Confluence spaces for pages that haven't been updated in over 180 days.
+    If a page is stale, it adds an automated comment asking the author to verify its relevance.
+    """
+    import logging
+    from datetime import datetime, timezone, timedelta
+    from langchain_core.messages import HumanMessage
+    from app.clients.confluence_client import ConfluenceClient
+    from app.clients import settings
+    from langchain_openai import ChatOpenAI
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Confluence stale page reminder task...")
+
+    if not settings.get("OPENAI_API_KEY"):
+        logger.warning("OPENAI_API_KEY not found. Skipping Confluence stale page reminder.")
+        return "Confluence stale page reminder task skipped (no OpenAI API key)"
+
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+    if not tracked_spaces or not tracked_spaces[0].strip():
+        logger.info("No CONFLUENCE_TRACKED_SPACES configured. Skipping task.")
+        return "Confluence stale page reminder task skipped (no spaces configured)"
+
+    confluence_client = ConfluenceClient()
+    marker = "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_REMINDER -->"
+    stale_threshold = datetime.now(timezone.utc) - timedelta(days=180)
+    llm = ChatOpenAI(temperature=0.7, model="gpt-4o")
+
+    for space in tracked_spaces:
+        space = space.strip()
+        if not space:
+            continue
+        try:
+            pages_response = confluence_client.client.get_all_pages_from_space(space, expand="version", start=0, limit=100)
+            pages = []
+            if isinstance(pages_response, list):
+                pages = pages_response
+            elif isinstance(pages_response, dict) and "results" in pages_response:
+                pages = pages_response["results"]
+
+            for page in pages:
+                version_info = page.get("version", {})
+                when_str = version_info.get("when")
+                if when_str:
+                    try:
+                        when_dt = datetime.strptime(when_str[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+                        if when_dt < stale_threshold:
+                            page_id = page.get("id")
+                            title = page.get("title", "Untitled")
+
+                            # Check existing comments
+                            comments_response = confluence_client.client.get_page_comments(page_id, expand="body.storage")
+                            comments = []
+                            if isinstance(comments_response, dict) and "results" in comments_response:
+                                comments = comments_response["results"]
+                            elif isinstance(comments_response, list):
+                                comments = comments_response
+
+                            already_reminded = False
+                            for comment in comments:
+                                body = comment.get("body", {}).get("storage", {}).get("value", "")
+                                if marker in body:
+                                    already_reminded = True
+                                    break
+
+                            if not already_reminded:
+                                prompt = (
+                                    f"Сгенерируй короткое и вежливое напоминание (в 1-2 предложениях) автору страницы в Confluence '{title}', "
+                                    "о том, что страница не обновлялась более полугода. Попроси проверить её актуальность и обновить или заархивировать, если она устарела. "
+                                    "Не используй Markdown форматирование. Пиши просто текст."
+                                )
+                                response = await llm.ainvoke([HumanMessage(content=prompt)])
+
+                                comment_body = f"{marker}\n{response.content}"
+                                confluence_client.client.add_comment(page_id, comment_body)
+                                logger.info(f"Added stale reminder to Confluence page '{title}' ({page_id}).")
+
+                    except Exception as e:
+                        logger.error(f"Error parsing date or adding comment for page {page.get('id')}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing Confluence space {space} for stale pages: {e}")
+
+    return "Confluence stale page reminder task completed."
