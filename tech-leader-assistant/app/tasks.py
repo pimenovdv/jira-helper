@@ -3421,3 +3421,82 @@ async def confluence_stale_page_reminder_task():
             logger.error(f"Error processing Confluence space {space} for stale pages: {e}")
 
     return "Confluence stale page reminder task completed."
+
+async def gitlab_mr_wip_limit_reminder_task():
+    """
+    Checks the number of open Merge Requests per author in tracked GitLab projects.
+    If an author has more than 3 open MRs, generates a polite message (in Russian) using the LLM
+    reminding them of the WIP (Work In Progress) limits and encourages them to focus on closing existing MRs.
+    The reminder is posted to their most recently created open MR.
+    """
+    import logging
+    from collections import defaultdict
+    from langchain_core.messages import HumanMessage
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    if not tracked_projects:
+        logger.info("No GitLab projects tracked for WIP limit reminder.")
+        return "No projects tracked"
+
+    # Dictionary to hold lists of open MRs by author username
+    author_mrs = defaultdict(list)
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                author_username = mr.author['username']
+                author_mrs[author_username].append((project_id, mr))
+        except Exception as e:
+            logger.error(f"Error fetching MRs for project {project_id}: {e}")
+            continue
+
+    WIP_LIMIT = 3
+
+    # Initialize LLM only if there are authors exceeding the WIP limit
+    llm = None
+    marker = "<!-- AUTO_GENERATED_WIP_LIMIT_REMINDER -->"
+
+    for author, mr_list in author_mrs.items():
+        if len(mr_list) > WIP_LIMIT:
+            if llm is None:
+                llm = ChatOpenAI(temperature=0.7, model="gpt-4o")
+            logger.info(f"Author {author} has {len(mr_list)} open MRs, exceeding WIP limit of {WIP_LIMIT}.")
+
+            # Find the most recently created MR for this author
+            # mr.created_at is typically an ISO format string, which sorts correctly
+            most_recent_mr_tuple = sorted(mr_list, key=lambda x: x[1].created_at, reverse=True)[0]
+            target_project_id, target_mr = most_recent_mr_tuple
+
+            try:
+                # Check if we already notified on this specific MR
+                notes = target_mr.notes.list(all=True)
+                already_notified = any(marker in note.body for note in notes)
+
+                if already_notified:
+                    logger.info(f"Already notified {author} about WIP limit on MR !{target_mr.iid}.")
+                    continue
+
+                prompt = (
+                    f"Разработчик @{author} превысил лимит WIP (Work In Progress), имея {len(mr_list)} открытых Merge Requests. "
+                    "Лимит равен 3. "
+                    "Напиши очень вежливое, дружелюбное и короткое сообщение (1-2 абзаца) на русском языке для комментария в его последнем MR. "
+                    "Сообщение должно мягко напомнить о важности доведения начатых задач до конца (фокус на завершении текущих MR), "
+                    "прежде чем брать в работу новые. Не будь токсичным, будь как заботливый скрам-мастер."
+                )
+
+                response = await llm.ainvoke([HumanMessage(content=prompt)])
+                comment_body = f"{response.content}\n\n{marker}"
+
+                gitlab_client.create_mr_note(target_project_id, target_mr.iid, comment_body)
+                logger.info(f"Posted WIP limit reminder for {author} on project {target_project_id}, MR !{target_mr.iid}.")
+
+            except Exception as e:
+                logger.error(f"Error processing WIP limit reminder for {author} on MR !{target_mr.iid}: {e}")
+
+    return "GitLab MR WIP limit reminder task completed"
