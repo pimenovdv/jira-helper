@@ -46,7 +46,8 @@ from .tasks import (
     gitlab_mr_description_checklist_validator_task,
     gitlab_mr_code_churn_notifier_task,
     jira_stale_epic_reminder_task,
-    confluence_stale_page_reminder_task
+    confluence_stale_page_reminder_task,
+    jira_stale_in_progress_reminder_task
 )
 import logging
 
@@ -130,6 +131,15 @@ def setup_scheduler():
     scheduler.add_job(gitlab_mr_missing_labels_notifier_task, 'cron', hour='*/6', minute=15, id="gitlab_mr_missing_labels_notifier")
     scheduler.add_job(confluence_stale_page_reminder_task, 'cron', hour=6, minute=0, id="confluence_stale_page_reminder")
 
+
+    scheduler.add_job(
+        jira_stale_in_progress_reminder_task,
+        "cron",
+        hour=9,
+        minute=0,
+        id="jira_stale_in_progress_reminder_job",
+        replace_existing=True,
+    )
     logger.info("APScheduler jobs configured.")
 
 def start_scheduler():
