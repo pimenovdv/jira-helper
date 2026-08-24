@@ -3500,3 +3500,62 @@ async def gitlab_mr_wip_limit_reminder_task():
                 logger.error(f"Error processing WIP limit reminder for {author} on MR !{target_mr.iid}: {e}")
 
     return "GitLab MR WIP limit reminder task completed"
+
+async def jira_stale_in_progress_reminder_task():
+    """
+    Checks Jira tasks that have been in 'In Progress' status for more than 5 days
+    without any updates. Posts a reminder comment asking for a status update.
+    """
+
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira stale 'In Progress' reminder task...")
+
+    if not settings.get("OPENAI_API_KEY"):
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira stale 'In Progress' reminder.")
+        return "Jira stale 'In Progress' reminder task skipped (no OpenAI API key)"
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_STALE_IN_PROGRESS_REMINDER -->"
+    llm = ChatOpenAI(model="gpt-4o", temperature=0.7)
+
+    for j_proj in tracked_projects:
+        jql = f'project = "{j_proj}" AND status = "In Progress" AND updated <= -5d'
+        try:
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(
+                    reminder_marker in (c.body or "") for c in comments
+                )
+                if already_reminded:
+                    logger.info(f"Already sent stale 'In Progress' reminder for Jira task {issue.key}.")
+                    continue
+
+                assignee_name = issue.fields.assignee.displayName if issue.fields.assignee else "Команда"
+
+                try:
+                    prompt = (
+                        f"Ты ассистент технического лидера, который помогает следить за процессом разработки. "
+                        f"Напишите короткое, вежливое сообщение автору/исполнителю ({assignee_name}) задачи Jira ({issue.key}), "
+                        f"которая находится в статусе 'In Progress' более 5 дней без обновлений. "
+                        f"Спросите, нужна ли помощь, есть ли какие-то блокеры, и попросите обновить статус задачи, если она уже выполнена. "
+                        f"В конце добавь скрытый маркер: {reminder_marker}"
+                    )
+
+                    response = llm.invoke([HumanMessage(content=prompt)])
+                    comment_body = response.content
+
+                    jira_client.add_comment(issue.key, comment_body)
+                    logger.info(f"Added stale 'In Progress' reminder to Jira task {issue.key}")
+                except Exception as e:
+                    logger.error(f"Failed to generate/post stale 'In Progress' reminder for {issue.key}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to process Jira stale 'In Progress' reminder for project {j_proj}: {e}")
+
+    logger.info("Finished Jira stale 'In Progress' reminder task.")
+    return "Jira stale 'In Progress' reminder task completed"
