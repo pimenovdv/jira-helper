@@ -1588,6 +1588,7 @@ async def test_confluence_stale_page_reminder_task(mocker, monkeypatch):
     mock_settings.get.side_effect = mock_settings_get
     mocker.patch("app.tasks.settings", mock_settings)
     mocker.patch("app.clients.settings", mock_settings)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     mock_confluence_cls = mocker.patch("app.clients.confluence_client.ConfluenceClient")
     mock_confluence = mock_confluence_cls.return_value
@@ -1627,7 +1628,7 @@ async def test_confluence_stale_page_reminder_task(mocker, monkeypatch):
     res = await confluence_stale_page_reminder_task()
 
     assert res == "Confluence stale page reminder task completed."
-    mock_confluence.client.get_all_pages_from_space.assert_called_once_with("TEST-SPACE", expand="version", start=0, limit=100)
+    mock_confluence.client.get_all_pages_from_space.assert_called_once_with("TEST-SPACE", expand="version,history.lastUpdated", start=0, limit=100)
     mock_llm.ainvoke.assert_awaited_once()
     mock_confluence.client.add_comment.assert_called_once()
     args, _ = mock_confluence.client.add_comment.call_args
@@ -1653,6 +1654,7 @@ async def test_confluence_stale_page_reminder_task_already_reminded(mocker, monk
     mock_settings.get.side_effect = mock_settings_get
     mocker.patch("app.tasks.settings", mock_settings)
     mocker.patch("app.clients.settings", mock_settings)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     mock_confluence_cls = mocker.patch("app.clients.confluence_client.ConfluenceClient")
     mock_confluence = mock_confluence_cls.return_value
@@ -1707,6 +1709,7 @@ async def test_confluence_stale_page_reminder_task_no_api_key(mocker, monkeypatc
     mock_settings.get.side_effect = mock_settings_get
     mocker.patch("app.tasks.settings", mock_settings)
     mocker.patch("app.clients.settings", mock_settings)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     res = await confluence_stale_page_reminder_task()
     assert res == "Confluence stale page reminder task skipped (no OpenAI API key)"
@@ -1728,6 +1731,185 @@ async def test_confluence_stale_page_reminder_task_no_spaces(mocker, monkeypatch
     mock_settings.get.side_effect = mock_settings_get
     mocker.patch("app.tasks.settings", mock_settings)
     mocker.patch("app.clients.settings", mock_settings)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     res = await confluence_stale_page_reminder_task()
     assert res == "Confluence stale page reminder task skipped (no spaces configured)"
+
+@pytest.mark.asyncio
+async def test_confluence_stale_architecture_review_reminder_task(mocker, monkeypatch):
+    from app.tasks import confluence_stale_architecture_review_reminder_task
+    from datetime import datetime, timezone, timedelta
+
+    def mock_settings_get(key, default=""):
+        if key == "CONFLUENCE_TRACKED_SPACES":
+            return "TEST-SPACE"
+        if key == "OPENAI_API_KEY":
+            return "test-key"
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch("app.tasks.settings", mock_settings)
+    mocker.patch("app.clients.settings", mock_settings)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    mock_confluence_cls = mocker.patch("app.clients.confluence_client.ConfluenceClient")
+    mock_confluence = mock_confluence_cls.return_value
+
+    mock_llm = mocker.MagicMock()
+    mock_response = mocker.MagicMock()
+    mock_response.content = "Please update this arch page."
+    mock_llm.ainvoke = mocker.AsyncMock(return_value=mock_response)
+    mocker.patch("langchain_openai.ChatOpenAI", return_value=mock_llm)
+
+    stale_date = (datetime.now(timezone.utc) - timedelta(days=190)).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+
+    mock_confluence.client.get_all_pages_from_space.return_value = {
+        "results": [
+            {
+                "id": "123",
+                "title": "Stale Arch Page",
+                "version": {
+                    "when": stale_date
+                },
+                "history": {
+                    "lastUpdated": {
+                        "by": {
+                            "accountId": "user-account-123"
+                        }
+                    }
+                }
+            }
+        ]
+    }
+
+    mock_confluence.client.get_page_labels.return_value = {
+        "results": [
+            {"name": "architecture"}
+        ]
+    }
+
+    mock_confluence.client.get_page_comments.return_value = {
+        "results": [
+            {
+                "body": {
+                    "storage": {
+                        "value": "Normal comment"
+                    }
+                }
+            }
+        ]
+    }
+
+    res = await confluence_stale_architecture_review_reminder_task()
+
+    assert res == "Confluence stale architecture review reminder task completed."
+    mock_confluence.client.get_all_pages_from_space.assert_called_once_with("TEST-SPACE", expand="version,history.lastUpdated", start=0, limit=100)
+    mock_confluence.client.get_page_labels.assert_called_once_with("123")
+    mock_llm.ainvoke.assert_awaited_once()
+    mock_confluence.client.add_comment.assert_called_once()
+    args, _ = mock_confluence.client.add_comment.call_args
+    assert args[0] == "123"
+    assert "<!-- AUTO_GENERATED_CONFLUENCE_STALE_ARCH_REMINDER -->" in args[1]
+    assert "[~accountid:user-account-123]" in args[1]
+    assert "Please update this arch page." in args[1]
+
+@pytest.mark.asyncio
+async def test_confluence_stale_architecture_review_reminder_task_already_reminded(mocker, monkeypatch):
+    from app.tasks import confluence_stale_architecture_review_reminder_task
+    from datetime import datetime, timezone, timedelta
+
+    def mock_settings_get(key, default=""):
+        if key == "CONFLUENCE_TRACKED_SPACES":
+            return "TEST-SPACE"
+        if key == "OPENAI_API_KEY":
+            return "test-key"
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch("app.tasks.settings", mock_settings)
+    mocker.patch("app.clients.settings", mock_settings)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    mock_confluence_cls = mocker.patch("app.clients.confluence_client.ConfluenceClient")
+    mock_confluence = mock_confluence_cls.return_value
+
+    stale_date = (datetime.now(timezone.utc) - timedelta(days=190)).strftime("%Y-%m-%dT%H:%M:%S.000+0000")
+
+    mock_confluence.client.get_all_pages_from_space.return_value = {
+        "results": [
+            {
+                "id": "123",
+                "title": "Stale Arch Page",
+                "version": {
+                    "when": stale_date
+                },
+                "history": {
+                    "lastUpdated": {
+                        "by": {
+                            "accountId": "user-account-123"
+                        }
+                    }
+                }
+            }
+        ]
+    }
+
+    mock_confluence.client.get_page_labels.return_value = {
+        "results": [
+            {"name": "arch"}
+        ]
+    }
+
+    mock_confluence.client.get_page_comments.return_value = {
+        "results": [
+            {
+                "body": {
+                    "storage": {
+                        "value": "<!-- AUTO_GENERATED_CONFLUENCE_STALE_ARCH_REMINDER -->\nPreviously reminded"
+                    }
+                }
+            }
+        ]
+    }
+
+    res = await confluence_stale_architecture_review_reminder_task()
+
+    assert res == "Confluence stale architecture review reminder task completed."
+    mock_confluence.client.add_comment.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_confluence_stale_architecture_review_reminder_task_no_api_key(mocker, monkeypatch):
+    from app.tasks import confluence_stale_architecture_review_reminder_task
+
+    def mock_settings_get(key, default=""):
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch("app.tasks.settings", mock_settings)
+    mocker.patch("app.clients.settings", mock_settings)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    res = await confluence_stale_architecture_review_reminder_task()
+    assert res == "Confluence stale architecture review reminder task skipped (no OpenAI API key)"
+
+@pytest.mark.asyncio
+async def test_confluence_stale_architecture_review_reminder_task_no_spaces(mocker, monkeypatch):
+    from app.tasks import confluence_stale_architecture_review_reminder_task
+
+    def mock_settings_get(key, default=""):
+        if key == "OPENAI_API_KEY":
+            return "test-key"
+        return default
+
+    mock_settings = mocker.MagicMock()
+    mock_settings.get.side_effect = mock_settings_get
+    mocker.patch("app.tasks.settings", mock_settings)
+    mocker.patch("app.clients.settings", mock_settings)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    res = await confluence_stale_architecture_review_reminder_task()
+    assert res == "Confluence stale architecture review reminder task skipped (no spaces configured)"
