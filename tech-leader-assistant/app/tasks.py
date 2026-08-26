@@ -789,7 +789,7 @@ async def automated_code_review_task():
     from app.clients.opensearch_client import OpenSearchClient
 
     # ChatOpenAI imported globally
-    from langchain_core.messages import HumanMessage, AIMessage
+    from langchain_core.messages import HumanMessage
 
     gitlab_client = GitLabClient()
     opensearch_client = OpenSearchClient()
@@ -2726,7 +2726,6 @@ async def gitlab_stale_draft_mr_closer_task():
     """
     import logging
     from datetime import datetime, timezone
-    import dateutil.parser
     global GitLabClient
     from app.clients import settings
 
@@ -3662,3 +3661,100 @@ async def jira_stale_in_progress_reminder_task():
 
     logger.info("Finished Jira stale 'In Progress' reminder task.")
     return "Jira stale 'In Progress' reminder task completed"
+
+async def confluence_missing_diagram_checker_task():
+    """
+    Checks tracked Confluence spaces for architecture documents (pages with label 'architecture' or 'arch')
+    that lack embedded diagrams (e.g. draw.io, plantuml, gliffy, mermaid macros or explicit image attachments).
+    If an architecture document lacks diagrams, it adds an automated comment suggesting the addition of a visual diagram.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+    from app.clients.confluence_client import ConfluenceClient
+    from app.clients import settings
+    from langchain_openai import ChatOpenAI
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Confluence missing diagram checker task...")
+
+    if not settings.get("OPENAI_API_KEY"):
+        logger.warning("OPENAI_API_KEY not found. Skipping Confluence missing diagram checker.")
+        return "Confluence missing diagram checker task skipped (no OpenAI API key)"
+
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+    if not tracked_spaces or not tracked_spaces[0].strip():
+        logger.info("No CONFLUENCE_TRACKED_SPACES configured. Skipping task.")
+        return "Confluence missing diagram checker task skipped (no spaces configured)"
+
+    confluence_client = ConfluenceClient()
+    marker = "<!-- AUTO_GENERATED_CONFLUENCE_MISSING_DIAGRAM_REMINDER -->"
+    llm = ChatOpenAI(temperature=0.7, model="gpt-4o")
+    diagram_indicators = ["draw.io", "plantuml", "gliffy", "mermaid", "<ac:image", "<img"]
+
+    for space in tracked_spaces:
+        space = space.strip()
+        if not space:
+            continue
+        try:
+            pages_response = confluence_client.client.get_all_pages_from_space(space, expand="body.storage,version,history.lastUpdated", start=0, limit=100)
+            pages = []
+            if isinstance(pages_response, list):
+                pages = pages_response
+            elif isinstance(pages_response, dict) and "results" in pages_response:
+                pages = pages_response["results"]
+
+            for page in pages:
+                page_id = page.get("id")
+                title = page.get("title", "Untitled")
+
+                # Check labels
+                labels_response = confluence_client.client.get_page_labels(page_id)
+                labels = []
+                if isinstance(labels_response, dict) and "results" in labels_response:
+                    labels = labels_response["results"]
+                elif isinstance(labels_response, list):
+                    labels = labels_response
+
+                label_names = [l.get("name", "").lower() for l in labels]
+                if "architecture" not in label_names and "arch" not in label_names:
+                    continue
+
+                body_storage = page.get("body", {}).get("storage", {}).get("value", "")
+                has_diagram = any(indicator in body_storage for indicator in diagram_indicators)
+
+                if not has_diagram:
+                    # Check existing comments
+                    comments_response = confluence_client.client.get_page_comments(page_id, expand="body.storage")
+                    comments = []
+                    if isinstance(comments_response, dict) and "results" in comments_response:
+                        comments = comments_response["results"]
+                    elif isinstance(comments_response, list):
+                        comments = comments_response
+
+                    already_reminded = False
+                    for comment in comments:
+                        body = comment.get("body", {}).get("storage", {}).get("value", "")
+                        if marker in body:
+                            already_reminded = True
+                            break
+
+                    if not already_reminded:
+                        author_id = page.get("history", {}).get("lastUpdated", {}).get("by", {}).get("accountId")
+                        author_mention = f"[~accountid:{author_id}] " if author_id else ""
+
+                        prompt = (
+                            f"Сгенерируй короткое и вежливое напоминание (в 1-2 предложениях) автору архитектурного документа в Confluence '{title}', "
+                            "о том, что в документе отсутствуют диаграммы или схемы. Попроси добавить визуализацию (например, draw.io, plantuml, mermaid и т.д.) "
+                            "для лучшего понимания архитектуры. "
+                            "Не используй Markdown форматирование. Пиши просто текст."
+                        )
+                        response = await llm.ainvoke([HumanMessage(content=prompt)])
+
+                        comment_body = f"{marker}\n{author_mention}{response.content}"
+                        confluence_client.client.add_comment(page_id, comment_body)
+                        logger.info(f"Added missing diagram reminder to Confluence page '{title}' ({page_id}).")
+
+        except Exception as e:
+            logger.error(f"Error processing Confluence space {space} for missing diagrams: {e}")
+
+    return "Confluence missing diagram checker task completed."
