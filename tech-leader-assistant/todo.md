@@ -11,16 +11,14 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-35)
-- [x] Initial setup, core sync (Jira/GitLab), DB, agentic RAG workflows.
-- [x] Comprehensive automations, workflow enforcements, metadata warnings, issue/PR maintenance, and Confluence sync.
-- [x] Code Health & Analytics (Code Churn Alerts, Stale Epic Reminders, Confluence Author Summaries, Stale Page Reminders, Stale Architecture Reminders).
-- [x] GitLab MR Missing Labels Notifier (Notifies authors if their open MR has no labels)
-- [x] GitLab MR WIP Limit Reminder (Notifies authors with more than 3 open MRs about WIP limits).
-- [x] Jira Task Stale "In Progress" Reminder (Query Jira for "In Progress" issues not updated for > 5 days).
+### Completed Phases (1-36)
+- [x] Initial setup, core sync (Jira/GitLab), DB, agentic RAG workflows, automated reminders.
+- [x] Comprehensive automations for code quality, process enforcement, and issue/PR maintenance.
+- [x] Code Health & Analytics (Code Churn Alerts, Stale Epic/MR Reminders, Confluence Author Summaries, Diagram Checkers).
+- [x] Confluence Missing Diagram Checker
 
-### Phase 36: Confluence Missing Diagram Checker
-- [ ] Develop a task (`confluence_missing_diagram_checker_task`) to check Confluence architecture documents (pages with label 'architecture') for embedded diagrams (e.g. draw.io, plantuml, gliffy, mermaid macros or explicit image attachments).
-- [ ] If an architecture document lacks diagrams, use the LLM to generate a comment suggesting the addition of a visual diagram for clarity.
-- [ ] Register the task in the scheduler to run weekly.
+### Phase 37: GitLab MR Missing Description Validation
+- [ ] Develop a task (`gitlab_mr_missing_description_notifier_task`) to check open GitLab MRs and ensure they have a non-empty description.
+- [ ] If an MR lacks a description, add an automated comment asking the author to provide one, explaining the context of the changes.
+- [ ] Register the task in the scheduler to run daily.
 - [ ] Add corresponding unit tests.
