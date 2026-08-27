@@ -739,8 +739,8 @@ async def test_gitlab_mr_conflict_notifier_task_already_notified(mocker):
     mock_gl_client.create_mr_note.assert_not_called()
 
 @pytest.mark.asyncio
-async def test_gitlab_empty_mr_description_notifier_task(mocker):
-    from app.tasks import gitlab_empty_mr_description_notifier_task
+async def test_gitlab_mr_missing_description_notifier_task(mocker):
+    from app.tasks import gitlab_mr_missing_description_notifier_task
 
     # Mock settings
     def mock_settings_get(key, default=""):
@@ -787,7 +787,7 @@ async def test_gitlab_empty_mr_description_notifier_task(mocker):
     mock_mr.notes.list.return_value = []
 
     # Run the task
-    result = await gitlab_empty_mr_description_notifier_task()
+    result = await gitlab_mr_missing_description_notifier_task()
 
     assert result == "GitLab empty MR description notifier task completed"
 
@@ -800,8 +800,8 @@ async def test_gitlab_empty_mr_description_notifier_task(mocker):
     )
 
 @pytest.mark.asyncio
-async def test_gitlab_empty_mr_description_notifier_task_long_description(mocker):
-    from app.tasks import gitlab_empty_mr_description_notifier_task
+async def test_gitlab_mr_missing_description_notifier_task_long_description(mocker):
+    from app.tasks import gitlab_mr_missing_description_notifier_task
 
     # Mock settings
     def mock_settings_get(key, default=""):
@@ -842,7 +842,7 @@ async def test_gitlab_empty_mr_description_notifier_task_long_description(mocker
     mock_project.mergerequests.list.return_value = [mock_mr]
 
     # Run the task
-    result = await gitlab_empty_mr_description_notifier_task()
+    result = await gitlab_mr_missing_description_notifier_task()
 
     assert result == "GitLab empty MR description notifier task completed"
 

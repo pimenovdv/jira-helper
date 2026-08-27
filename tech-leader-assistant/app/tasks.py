@@ -1220,7 +1220,7 @@ async def gitlab_mr_conflict_notifier_task():
     return "GitLab MR conflict notifier task completed"
 
 
-async def gitlab_empty_mr_description_notifier_task():
+async def gitlab_mr_missing_description_notifier_task():
     """
     Iterates over open MRs for tracked projects.
     If an MR has an empty or very short description, checks if a reminder has been sent.
