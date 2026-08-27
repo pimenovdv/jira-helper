@@ -20,7 +20,7 @@ from .tasks import (
     gitlab_merged_branch_cleanup_task,
     gitlab_mr_jira_validator_task,
     gitlab_mr_conflict_notifier_task,
-    gitlab_empty_mr_description_notifier_task,
+    gitlab_mr_missing_description_notifier_task,
     jira_missing_estimation_reminder_task,
     gitlab_unresolved_threads_reminder_task,
     gitlab_mr_cicd_failure_notifier_task,
@@ -95,7 +95,7 @@ def setup_scheduler():
 
     scheduler.add_job(gitlab_mr_conflict_notifier_task, 'interval', hours=1, id="gitlab_mr_conflict_notifier")
 
-    scheduler.add_job(gitlab_empty_mr_description_notifier_task, 'cron', hour='*/6', minute=0, id="gitlab_empty_mr_description_notifier")
+    scheduler.add_job(gitlab_mr_missing_description_notifier_task, 'cron', hour='*/6', minute=0, id="gitlab_mr_missing_description_notifier")
 
     scheduler.add_job(jira_missing_estimation_reminder_task, 'cron', hour=7, minute=0, id="jira_missing_estimation_reminder")
 

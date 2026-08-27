@@ -18,7 +18,7 @@
 - [x] Confluence Missing Diagram Checker
 
 ### Phase 37: GitLab MR Missing Description Validation
-- [ ] Develop a task (`gitlab_mr_missing_description_notifier_task`) to check open GitLab MRs and ensure they have a non-empty description.
-- [ ] If an MR lacks a description, add an automated comment asking the author to provide one, explaining the context of the changes.
-- [ ] Register the task in the scheduler to run daily.
-- [ ] Add corresponding unit tests.
+- [x] Develop a task (`gitlab_mr_missing_description_notifier_task`) to check open GitLab MRs and ensure they have a non-empty description.
+- [x] If an MR lacks a description, add an automated comment asking the author to provide one, explaining the context of the changes.
+- [x] Register the task in the scheduler to run daily.
+- [x] Add corresponding unit tests.
