@@ -11,14 +11,13 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-36)
+### Completed Phases (1-37)
 - [x] Initial setup, core sync (Jira/GitLab), DB, agentic RAG workflows, automated reminders.
-- [x] Comprehensive automations for code quality, process enforcement, and issue/PR maintenance.
+- [x] Comprehensive automations for code quality, process enforcement, issue/PR maintenance, and GitLab MR missing description validation.
 - [x] Code Health & Analytics (Code Churn Alerts, Stale Epic/MR Reminders, Confluence Author Summaries, Diagram Checkers).
-- [x] Confluence Missing Diagram Checker
 
-### Phase 37: GitLab MR Missing Description Validation
-- [x] Develop a task (`gitlab_mr_missing_description_notifier_task`) to check open GitLab MRs and ensure they have a non-empty description.
-- [x] If an MR lacks a description, add an automated comment asking the author to provide one, explaining the context of the changes.
+### Phase 38: GitLab MR Missing Tests Checker
+- [x] Develop a task (`gitlab_mr_missing_tests_checker_task`) to check open GitLab MRs for code changes without test changes.
+- [x] If an MR modifies source files but no test files, add an automated comment asking the author to provide tests.
 - [x] Register the task in the scheduler to run daily.
 - [x] Add corresponding unit tests.
