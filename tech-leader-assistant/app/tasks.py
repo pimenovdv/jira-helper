@@ -3758,3 +3758,78 @@ async def confluence_missing_diagram_checker_task():
             logger.error(f"Error processing Confluence space {space} for missing diagrams: {e}")
 
     return "Confluence missing diagram checker task completed."
+
+
+async def gitlab_mr_missing_tests_checker_task():
+    """
+    Iterates over open MRs for tracked projects.
+    Checks if an MR modifies source files but lacks test files.
+    If so, generates a polite notification via LLM in Russian asking to add tests.
+    """
+    import logging
+    # Use global imports so mocker can patch them in app.tasks
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab MR missing tests checker task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping missing tests checker.")
+        return "GitLab MR missing tests checker task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    gitlab_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [p.strip() for p in gitlab_projects if p.strip()]
+
+    client = GitLabClient()
+    reminder_marker = "<!-- AUTO_GENERATED_MISSING_TESTS_COMMENT -->"
+
+    # Simple heuristic for common source and test files
+    source_extensions = ('.py', '.js', '.ts', '.java', '.go', '.cpp', '.c', '.rb', '.php')
+    test_indicators = ('test_', '_test', '.spec.', 'tests/', 'test/')
+
+    for project_id in gitlab_projects:
+        try:
+            project = client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                # Fetch MR object directly to get changes
+                mr_obj = project.mergerequests.get(mr.iid)
+                changes = mr_obj.changes()
+
+                has_source_changes = False
+                has_test_changes = False
+
+                for change in changes.get('changes', []):
+                    new_path = change.get('new_path', '').lower()
+
+                    if any(new_path.endswith(ext) for ext in source_extensions):
+                        if any(ind in new_path for ind in test_indicators):
+                            has_test_changes = True
+                        else:
+                            has_source_changes = True
+
+                if has_source_changes and not has_test_changes:
+                    mr_notes = mr_obj.notes.list(get_all=True)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
+
+                    if not already_notified:
+                        prompt = (
+                            f"Сгенерируй короткое и вежливое напоминание (в 1-2 предложениях) автору Merge Request '{mr.title}', "
+                            "о том, что в MR изменен исходный код, но не добавлено и не изменено ни одного теста. "
+                            "Попроси добавить тесты, если это применимо для данных изменений. "
+                            f"Обязательно включи этот скрытый HTML маркер где-нибудь в ответе: {reminder_marker}\n"
+                            "Не используй Markdown форматирование. Пиши просто текст."
+                        )
+                        response = await llm.ainvoke(prompt)
+                        comment_body = response.content
+
+                        client.create_mr_note(project_id, mr.iid, comment_body)
+                        logger.info(f"Added missing tests reminder to MR {mr.iid} in project {project_id}")
+        except Exception as e:
+            logger.error(f"Error processing project {project_id} in missing tests checker task: {e}")
+
+    return "GitLab MR missing tests checker task completed."
