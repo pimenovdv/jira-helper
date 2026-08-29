@@ -3833,3 +3833,75 @@ async def gitlab_mr_missing_tests_checker_task():
             logger.error(f"Error processing project {project_id} in missing tests checker task: {e}")
 
     return "GitLab MR missing tests checker task completed."
+
+
+async def gitlab_mr_missing_changelog_checker_task():
+    """
+    Iterates over open MRs for tracked projects.
+    Checks if an MR modifies source files but lacks changelog updates.
+    If so, generates a polite notification via LLM in Russian asking to update the changelog.
+    """
+    import logging
+    # Use global imports so mocker can patch them in app.tasks
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab MR missing changelog checker task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping missing changelog checker.")
+        return "GitLab MR missing changelog checker task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    gitlab_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [p.strip() for p in gitlab_projects if p.strip()]
+
+    client = GitLabClient()
+    reminder_marker = "<!-- AUTO_GENERATED_MISSING_CHANGELOG_COMMENT -->"
+
+    source_extensions = ('.py', '.js', '.ts', '.java', '.go', '.cpp', '.c', '.rb', '.php', '.html', '.css', '.vue', '.jsx', '.tsx')
+
+    for project_id in gitlab_projects:
+        try:
+            project = client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                mr_obj = project.mergerequests.get(mr.iid)
+                changes = mr_obj.changes()
+
+                has_source_changes = False
+                has_changelog_changes = False
+
+                for change in changes.get('changes', []):
+                    new_path = change.get('new_path', '').lower()
+
+                    if any(new_path.endswith(ext) for ext in source_extensions):
+                        has_source_changes = True
+
+                    if 'changelog' in new_path:
+                        has_changelog_changes = True
+
+                if has_source_changes and not has_changelog_changes:
+                    mr_notes = mr_obj.notes.list(get_all=True)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
+
+                    if not already_notified:
+                        prompt = (
+                            f"Сгенерируй короткое и вежливое напоминание (в 1-2 предложениях) автору Merge Request '{mr.title}', "
+                            "о том, что в MR изменен исходный код, но не обновлен файл changelog. "
+                            "Попроси добавить описание изменений в changelog, если это требуется. "
+                            f"Обязательно включи этот скрытый HTML маркер где-нибудь в ответе: {reminder_marker}\n"
+                            "Не используй Markdown форматирование. Пиши просто текст."
+                        )
+                        response = await llm.ainvoke(prompt)
+                        comment_body = response.content
+
+                        client.create_mr_note(project_id, mr.iid, comment_body)
+                        logger.info(f"Added missing changelog reminder to MR {mr.iid} in project {project_id}")
+        except Exception as e:
+            logger.error(f"Error processing project {project_id} in missing changelog checker task: {e}")
+
+    return "GitLab MR missing changelog checker task completed."
