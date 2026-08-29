@@ -50,7 +50,8 @@ from .tasks import (
     confluence_stale_architecture_review_reminder_task,
     confluence_missing_diagram_checker_task,
     jira_stale_in_progress_reminder_task,
-    gitlab_mr_missing_tests_checker_task
+    gitlab_mr_missing_tests_checker_task,
+    gitlab_mr_missing_changelog_checker_task
 )
 import logging
 
@@ -136,6 +137,7 @@ def setup_scheduler():
     scheduler.add_job(confluence_stale_architecture_review_reminder_task, 'cron', hour=8, minute=30, id="confluence_stale_architecture_review_reminder")
     scheduler.add_job(confluence_missing_diagram_checker_task, 'cron', day_of_week='mon', hour=9, minute=0, id="confluence_missing_diagram_checker")
     scheduler.add_job(gitlab_mr_missing_tests_checker_task, 'cron', hour=9, minute=30, id="gitlab_mr_missing_tests_checker")
+    scheduler.add_job(gitlab_mr_missing_changelog_checker_task, 'cron', hour=10, minute=30, id="gitlab_mr_missing_changelog_checker")
 
     scheduler.add_job(
         jira_stale_in_progress_reminder_task,
