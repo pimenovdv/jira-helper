@@ -3905,3 +3905,75 @@ async def gitlab_mr_missing_changelog_checker_task():
             logger.error(f"Error processing project {project_id} in missing changelog checker task: {e}")
 
     return "GitLab MR missing changelog checker task completed."
+
+async def jira_stale_bug_escalation_task():
+    """
+    Checks for "Bug" type issues open for more than 30 days.
+    If found, leaves an automated comment escalating the bug and tags the reporter.
+    """
+    logger.info("Running Jira stale bug escalation task.")
+
+    openai_api_key = settings.get("OPENAI_API_KEY")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not set. Skipping stale bug escalation task.")
+        return "Jira stale bug escalation task skipped (no OpenAI API key)"
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+
+    llm = ChatOpenAI(temperature=0.7, model="gpt-4o-mini", api_key=openai_api_key)
+
+    import dateutil.parser
+    from datetime import datetime, timezone
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND issuetype = "Bug" AND statusCategory != "Done"'
+        issues = jira_client.search_issues(jql)
+
+        for issue in issues:
+            updated_str = getattr(issue.fields, "updated", None)
+            if not updated_str:
+                continue
+
+            try:
+                updated_at = dateutil.parser.isoparse(updated_str)
+            except Exception:
+                continue
+
+            days_inactive = (datetime.now(timezone.utc) - updated_at).days
+            if days_inactive > 30:
+                # Check for existing comment
+                comments = jira_client.get_comments(issue.key)
+                already_commented = False
+                for c in comments:
+                    if hasattr(c, 'body') and "<!-- AUTO_GENERATED_JIRA_STALE_BUG_ESCALATION -->" in c.body:
+                        already_commented = True
+                        break
+
+                if already_commented:
+                    continue
+
+                reporter = getattr(issue.fields, "reporter", None)
+                assignee = getattr(issue.fields, "assignee", None)
+
+                reporter_tag = f"[~accountid:{reporter.accountId}]" if reporter and hasattr(reporter, "accountId") else "Создатель"
+                assignee_tag = f"[~accountid:{assignee.accountId}]" if assignee and hasattr(assignee, "accountId") else "Исполнитель"
+
+                summary = getattr(issue.fields, "summary", "Без названия")
+
+                prompt = ChatPromptTemplate.from_messages([
+                    SystemMessage(content="You are an AI assistant that helps tech leaders manage Jira issues. Generate a polite but firm comment in Russian to escalate a bug that has been open and inactive for more than 30 days. Do not include markdown formatting or quotation marks in your response. The comment should ask about the status and if help is needed to resolve it."),
+                    HumanMessage(content=f"Generate an escalation comment for the bug '{summary}'. The reporter is {reporter_tag} and the assignee is {assignee_tag}. Address the reporter directly to ask for an update.")
+                ])
+                response = await llm.ainvoke(prompt)
+
+                comment_body = f"<!-- AUTO_GENERATED_JIRA_STALE_BUG_ESCALATION -->\n{response.content}"
+
+                jira_client.add_comment(issue.key, comment_body)
+                logger.info(f"Added stale bug escalation comment to {issue.key}")
+
+    return "Jira stale bug escalation task completed."

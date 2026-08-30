@@ -11,14 +11,20 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-38)
-- [x] Initial setup, core sync, DB, agentic RAG workflows.
-- [x] Automations for code quality, process enforcement, Jira/GitLab maintenance.
-- [x] Code Health, Analytics, Reminders, Validation.
-- [x] Missing Tests Checker for MRs.
+### Completed Phases (1-39)
+- [x] Initial setup, core sync, DB, agentic RAG workflows, Jira/GitLab maintenance.
+- [x] Automations for code quality, Code Health, Analytics, Validation.
+- [x] GitLab MR checks (Missing Tests, Missing Changelog, Title Linter, WIP Limit, etc.).
+- [x] Jira and Confluence reminders and checks.
 
-### Phase 39: GitLab MR Missing Changelog Checker
-- [x] Develop a task (`gitlab_mr_missing_changelog_checker_task`) to check open GitLab MRs for code changes without changelog updates.
-- [x] If an MR modifies source files but no changelog files, add an automated comment asking the author to update the changelog.
+### Phase 40: Jira Stale Bug Escalation
+- [x] Develop a task (`jira_stale_bug_escalation_task`) to check for "Bug" type issues open for more than 30 days.
+- [x] If found, leave an automated comment escalating the bug and tag the reporter.
 - [x] Register the task in the scheduler to run daily.
 - [x] Add corresponding unit tests.
+
+### Phase 41: GitLab MR Description Template Validator
+- [ ] Develop a task (`gitlab_mr_description_template_validator_task`) to check if open MRs contain required sections (e.g., `# How to test`).
+- [ ] If missing, leave an automated comment reminding the author to follow the template.
+- [ ] Register the task in the scheduler to run daily.
+- [ ] Add corresponding unit tests.
