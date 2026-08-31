@@ -3977,3 +3977,69 @@ async def jira_stale_bug_escalation_task():
                 logger.info(f"Added stale bug escalation comment to {issue.key}")
 
     return "Jira stale bug escalation task completed."
+
+async def gitlab_mr_description_template_validator_task():
+    """
+    Checks if open MRs contain required sections (e.g., `# How to test`) in their description.
+    If missing, posts a reminder to follow the template.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR description template validator task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR description template validator.")
+        return "GitLab MR description template validator task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_MR_DESCRIPTION_TEMPLATE_VALIDATOR -->"
+    required_section = "# How to test"
+
+    for gl_proj in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_mrs(gl_proj, state="opened")
+            for mr_data in mrs:
+                description = mr_data.get("description") or ""
+
+                if required_section.lower() in description.lower():
+                    continue
+
+                mr_iid = mr_data.get("iid")
+                notes = gitlab_client.get_mr_notes(gl_proj, mr_iid)
+                already_reminded = any(reminder_marker in getattr(n, "body", "") for n in notes)
+
+                if already_reminded:
+                    continue
+
+                author = mr_data.get("author", {})
+                author_username = author.get("username", "")
+                mention = f"@{author_username}" if author_username else "Автор"
+
+                prompt = (
+                    f"Ты - Quality Assurance Lead. Напиши вежливый комментарий (на русском языке) для "
+                    f"Merge Request !{mr_iid}. Упомяни {mention} и обрати внимание, что в описании MR отсутствует "
+                    f"обязательный раздел `{required_section}`. Попроси добавить этот раздел и описать, как именно нужно "
+                    f"тестировать изменения. Без приветствий, просто текст."
+                )
+
+                resp = await llm.ainvoke([
+                    SystemMessage(content="Ты — технический ассистент, помогающий командам соблюдать процессы разработки и тестирования."),
+                    HumanMessage(content=prompt)
+                ])
+                comment_text = f"{reminder_marker}\n{resp.content.strip()}"
+
+                gitlab_client.create_mr_note(gl_proj, mr_iid, comment_text)
+                logger.info(f"Posted missing template section reminder for GitLab MR !{mr_iid} in project {gl_proj}.")
+
+        except Exception as e:
+            logger.error(f"Failed to process GitLab MR template validator for project {gl_proj}: {e}")
+
+    return "GitLab MR description template validator task completed."
