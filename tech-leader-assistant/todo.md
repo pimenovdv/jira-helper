@@ -24,7 +24,7 @@
 - [x] Add corresponding unit tests.
 
 ### Phase 41: GitLab MR Description Template Validator
-- [ ] Develop a task (`gitlab_mr_description_template_validator_task`) to check if open MRs contain required sections (e.g., `# How to test`).
-- [ ] If missing, leave an automated comment reminding the author to follow the template.
-- [ ] Register the task in the scheduler to run daily.
-- [ ] Add corresponding unit tests.
+- [x] Develop a task (`gitlab_mr_description_template_validator_task`) to check if open MRs contain required sections (e.g., `# How to test`).
+- [x] If missing, leave an automated comment reminding the author to follow the template.
+- [x] Register the task in the scheduler to run daily.
+- [x] Add corresponding unit tests.
