@@ -4043,3 +4043,71 @@ async def gitlab_mr_description_template_validator_task():
             logger.error(f"Failed to process GitLab MR template validator for project {gl_proj}: {e}")
 
     return "GitLab MR description template validator task completed."
+
+async def gitlab_mr_conflict_checker_task():
+    """
+    Checks if open MRs in tracked GitLab projects have merge conflicts.
+    If so, posts an automated reminder to the author to resolve them.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR conflict checker task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR conflict checker.")
+        return "GitLab MR conflict checker task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    if not tracked_projects:
+        logger.info("No GitLab projects tracked for conflict checker.")
+        return "No projects tracked"
+
+    reminder_marker = "<!-- AUTO_GENERATED_GITLAB_MR_CONFLICT_CHECKER -->"
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.client.projects.get(project_id).mergerequests.list(state='opened', get_all=True)
+            for mr in mrs:
+                try:
+                    # has_conflicts is a boolean property on MRs in python-gitlab
+                    if getattr(mr, "has_conflicts", False):
+                        # Check if we already left a reminder
+                        notes = mr.notes.list(all=True)
+                        already_commented = any(
+                            hasattr(n, 'body') and reminder_marker in n.body for n in notes
+                        )
+
+                        if not already_commented:
+                            # Generate a friendly reminder message via LLM
+                            system_prompt = (
+                                "You are an AI assistant for a software development team. "
+                                "Your task is to write a polite message to the author of a GitLab Merge Request "
+                                "informing them that their Merge Request has merge conflicts that need to be resolved. "
+                                "Respond in Russian."
+                            )
+                            user_prompt = f"Write a short, polite message informing the author of MR !{mr.iid} that they need to resolve merge conflicts."
+                            messages = [
+                                SystemMessage(content=system_prompt),
+                                HumanMessage(content=user_prompt)
+                            ]
+
+                            response = await llm.ainvoke(messages)
+                            comment_body = f"{reminder_marker}\n{response.content}"
+
+                            gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+                            logger.info(f"Posted MR conflict reminder to MR !{mr.iid} in project {project_id}.")
+                except Exception as e:
+                    logger.error(f"Error processing MR !{getattr(mr, 'iid', 'unknown')} in project {project_id} for conflict checker: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching MRs for project {project_id} in conflict checker: {e}")
+
+    logger.info("Finished GitLab MR conflict checker task.")
+    return "GitLab MR conflict checker task completed"

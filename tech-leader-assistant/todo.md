@@ -11,20 +11,15 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-39)
+### Completed Phases (1-41)
 - [x] Initial setup, core sync, DB, agentic RAG workflows, Jira/GitLab maintenance.
 - [x] Automations for code quality, Code Health, Analytics, Validation.
 - [x] GitLab MR checks (Missing Tests, Missing Changelog, Title Linter, WIP Limit, etc.).
 - [x] Jira and Confluence reminders and checks.
+- [x] Jira Stale Bug Escalation and GitLab MR Description Template Validator.
 
-### Phase 40: Jira Stale Bug Escalation
-- [x] Develop a task (`jira_stale_bug_escalation_task`) to check for "Bug" type issues open for more than 30 days.
-- [x] If found, leave an automated comment escalating the bug and tag the reporter.
-- [x] Register the task in the scheduler to run daily.
-- [x] Add corresponding unit tests.
-
-### Phase 41: GitLab MR Description Template Validator
-- [x] Develop a task (`gitlab_mr_description_template_validator_task`) to check if open MRs contain required sections (e.g., `# How to test`).
-- [x] If missing, leave an automated comment reminding the author to follow the template.
+### Phase 42: GitLab MR Conflict Checker
+- [x] Develop a task (`gitlab_mr_conflict_checker_task`) to check for open MRs that have merge conflicts.
+- [x] If conflicts exist and no prior comment was left, leave an automated comment reminding the author to resolve them.
 - [x] Register the task in the scheduler to run daily.
 - [x] Add corresponding unit tests.

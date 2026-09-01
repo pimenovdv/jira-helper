@@ -53,7 +53,8 @@ from .tasks import (
     gitlab_mr_missing_tests_checker_task,
     gitlab_mr_missing_changelog_checker_task,
     jira_stale_bug_escalation_task,
-    gitlab_mr_description_template_validator_task
+    gitlab_mr_description_template_validator_task,
+    gitlab_mr_conflict_checker_task
 )
 import logging
 
@@ -142,6 +143,7 @@ def setup_scheduler():
     scheduler.add_job(gitlab_mr_missing_changelog_checker_task, 'cron', hour=10, minute=30, id="gitlab_mr_missing_changelog_checker")
     scheduler.add_job(jira_stale_bug_escalation_task, 'cron', hour=11, minute=0, id="jira_stale_bug_escalation")
     scheduler.add_job(gitlab_mr_description_template_validator_task, 'cron', hour=10, minute=0, id="gitlab_mr_description_template_validator")
+    scheduler.add_job(gitlab_mr_conflict_checker_task, 'cron', hour=12, minute=0, id="gitlab_mr_conflict_checker")
 
     scheduler.add_job(
         jira_stale_in_progress_reminder_task,
