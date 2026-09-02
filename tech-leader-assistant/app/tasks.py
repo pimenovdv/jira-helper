@@ -4111,3 +4111,67 @@ async def gitlab_mr_conflict_checker_task():
 
     logger.info("Finished GitLab MR conflict checker task.")
     return "GitLab MR conflict checker task completed"
+
+async def jira_missing_priority_reminder_task():
+    """
+    Checks active Jira tasks that lack a priority assignment,
+    and posts a comment reminding the team to add one.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    global JiraClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira missing priority reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira missing priority reminder.")
+        return "Jira missing priority reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_MISSING_PRIORITY_REMINDER -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND sprint in openSprints() AND statusCategory != Done'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {project_key}: {e}")
+            continue
+
+        for issue in issues:
+            try:
+                priority = getattr(issue.fields, "priority", None)
+                if priority is not None:
+                    continue
+
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if not already_reminded:
+                    prompt = (
+                        "Вы — технический лидер (Tech Lead). "
+                        "Напишите короткое, вежливое сообщение команде в комментариях задачи Jira, "
+                        "которая находится в активном спринте, но не имеет назначенного приоритета. "
+                        "Попросите добавить приоритет (Priority), чтобы было понятно, насколько критична эта задача. "
+                        "Сообщение должно быть на русском языке. Без приветствий, просто текст."
+                    )
+                    response = await llm.ainvoke([
+                        SystemMessage(content="Ты — технический ассистент, помогающий командам соблюдать процессы разработки."),
+                        HumanMessage(content=prompt)
+                    ])
+                    message = f"{response.content}\n\n{reminder_marker}"
+
+                    jira_client.add_comment(issue.key, message)
+                    logger.info(f"Added missing priority reminder to Jira task {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing missing priority reminder for issue {issue.key}: {e}")
+
+    logger.info("Finished Jira missing priority reminder task.")
+    return "Jira missing priority reminder task completed"
