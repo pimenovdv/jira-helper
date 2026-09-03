@@ -11,15 +11,15 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-42)
+### Completed Phases (1-43)
 - [x] Initial setup, core sync, DB, agentic RAG workflows, Jira/GitLab maintenance.
 - [x] Automations for code quality, Code Health, Analytics, Validation.
 - [x] GitLab MR checks (Missing Tests, Missing Changelog, Title Linter, WIP Limit, Conflict Checker, etc.).
 - [x] Jira and Confluence reminders and checks.
-- [x] Jira Stale Bug Escalation and GitLab MR Description Template Validator.
+- [x] Jira Stale Bug Escalation, GitLab MR Description Template Validator, and Jira Missing Priority Reminder.
 
-### Phase 43: Jira Missing Priority Reminder
-- [x] Develop a task (`jira_missing_priority_reminder_task`) to check active Jira tasks that lack a priority assignment.
-- [x] If no priority is set and no prior comment was left, leave an automated comment reminding the team to add one.
+### Phase 44: Jira Closed Missing Resolution Task
+- [x] Develop a task (`jira_closed_missing_resolution_task`) to check Jira tasks that are in a "Done" state but lack a resolution.
+- [x] If no resolution is set and no prior comment was left, leave an automated comment reminding the team to add one.
 - [x] Register the task in the scheduler to run daily.
 - [x] Add corresponding unit tests.
