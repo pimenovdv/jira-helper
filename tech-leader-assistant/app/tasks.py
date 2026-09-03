@@ -4175,3 +4175,66 @@ async def jira_missing_priority_reminder_task():
 
     logger.info("Finished Jira missing priority reminder task.")
     return "Jira missing priority reminder task completed"
+
+async def jira_closed_missing_resolution_task():
+    """
+    Checks Jira tasks that are in a 'Done' state but lack a resolution,
+    and posts a comment reminding the team to set one.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    global JiraClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira closed missing resolution reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira missing resolution reminder.")
+        return "Jira missing resolution reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_MISSING_RESOLUTION -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND statusCategory = Done AND resolution = EMPTY'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {project_key}: {e}")
+            continue
+
+        for issue in issues:
+            resolution = getattr(issue.fields, "resolution", None)
+            if resolution is None:
+                has_bot_comment = False
+                try:
+                    comments = jira_client.get_comments(issue.key)
+                    for comment in comments:
+                        if hasattr(comment, "body") and reminder_marker in comment.body:
+                            has_bot_comment = True
+                            break
+                except Exception as e:
+                    logger.error(f"Failed to check comments for issue {issue.key}: {e}")
+                    continue
+
+                if not has_bot_comment:
+                    assignee = getattr(issue.fields, "assignee", None)
+                    assignee_mention = f"[~{assignee.accountId}]" if assignee and hasattr(assignee, "accountId") else "Assignee/Reporter"
+
+                    sys_prompt = SystemMessage(content="You are a helpful AI assistant. Generate a polite comment to remind the user to set a resolution for a closed Jira task.")
+                    user_prompt = HumanMessage(content=f"Write a short, polite message (max 3 sentences) addressing {assignee_mention} asking them to set a resolution for issue {issue.key} because it is currently closed but has no resolution.")
+
+                    try:
+                        llm_resp = await llm.ainvoke([sys_prompt, user_prompt])
+                        comment_body = f"{llm_resp.content}\n\n{reminder_marker}"
+                        jira_client.add_comment(issue.key, comment_body)
+                        logger.info(f"Added missing resolution reminder to {issue.key}")
+                    except Exception as e:
+                        logger.error(f"Failed to process missing resolution reminder for {issue.key}: {e}")
+
+    return "Jira closed missing resolution reminder task completed."
