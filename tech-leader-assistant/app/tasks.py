@@ -4238,3 +4238,65 @@ async def jira_closed_missing_resolution_task():
                         logger.error(f"Failed to process missing resolution reminder for {issue.key}: {e}")
 
     return "Jira closed missing resolution reminder task completed."
+
+async def jira_missing_due_date_reminder_task():
+    """
+    Checks active Jira Epics that lack a due date,
+    and posts a comment reminding the team to add one.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    global JiraClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira missing due date reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira missing due date reminder.")
+        return "Jira missing due date reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_MISSING_DUE_DATE_REMINDER -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND issuetype = Epic AND statusCategory = "In Progress"'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {project_key}: {e}")
+            continue
+
+        for issue in issues:
+            try:
+                due_date = getattr(issue.fields, "duedate", None)
+                if due_date is not None:
+                    continue
+
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if already_reminded:
+                    logger.info(f"Skipping {issue.key}, due date reminder already sent.")
+                    continue
+
+                assignee = getattr(issue.fields, "assignee", None)
+                assignee_mention = f"[~{assignee.accountId}]" if assignee and hasattr(assignee, "accountId") else "Team"
+
+                sys_prompt = SystemMessage(content="You are a helpful AI assistant. Generate a polite comment to remind the user to add a due date to a Jira epic for better planning.")
+                user_prompt = HumanMessage(content=f"Write a short, polite message (max 3 sentences) addressing {assignee_mention} asking them to set a due date for Epic {issue.key} to help with project planning.")
+
+                llm_response = await llm.ainvoke([sys_prompt, user_prompt])
+                comment_body = f"{llm_response.content}\n\n{reminder_marker}"
+
+                jira_client.add_comment(issue.key, comment_body)
+                logger.info(f"Added missing due date reminder to Epic {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing issue {issue.key}: {e}")
+
+    return "Jira missing due date reminder task completed."
