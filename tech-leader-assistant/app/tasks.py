@@ -4300,3 +4300,66 @@ async def jira_missing_due_date_reminder_task():
                 logger.error(f"Error processing issue {issue.key}: {e}")
 
     return "Jira missing due date reminder task completed."
+
+async def gitlab_mr_delete_source_branch_checker_task():
+    """
+    Checks open MRs in tracked GitLab projects.
+    If the 'force_remove_source_branch' attribute is False, it posts a reminder asking the author
+    to enable 'Delete source branch when merge request is accepted'.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR delete source branch checker task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR delete source branch checker task.")
+        return "GitLab MR delete source branch checker task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_DELETE_SOURCE_BRANCH -->"
+
+    for project_id in tracked_projects:
+        try:
+            project = gitlab_client.get_project(project_id)
+            if not project:
+                continue
+
+            open_mrs = project.mergerequests.list(state='opened', get_all=True)
+            for mr in open_mrs:
+                # Check if it's set to delete source branch
+                if getattr(mr, "force_remove_source_branch", False) is True:
+                    continue
+
+                # Check if we already reminded them
+                notes = mr.notes.list(get_all=True)
+                already_reminded = any(reminder_marker in note.body for note in notes)
+
+                if already_reminded:
+                    logger.info(f"Skipping MR {mr.iid} in project {project_id}, already reminded about deleting source branch.")
+                    continue
+
+                author_username = mr.author.get('username') if hasattr(mr, 'author') and mr.author else 'Author'
+
+                sys_prompt = SystemMessage(content="You are a helpful AI assistant. Generate a polite comment to remind the user to enable 'Delete source branch when merge request is accepted' for their Merge Request. Respond in Russian.")
+                user_prompt = HumanMessage(content=f"Write a short, polite message (max 3 sentences) addressing @{author_username} asking them to enable the setting to delete the source branch upon merge for MR {mr.iid} to keep the repository clean.")
+
+                try:
+                    llm_response = await llm.ainvoke([sys_prompt, user_prompt])
+                    comment_body = f"{llm_response.content}\n\n{reminder_marker}"
+
+                    gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+                    logger.info(f"Added delete source branch reminder to MR {mr.iid} in project {project_id}")
+                except Exception as e:
+                    logger.error(f"Error posting comment to MR {mr.iid}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing project {project_id}: {e}")
+
+    return "GitLab MR delete source branch checker task completed."

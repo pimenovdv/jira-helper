@@ -57,7 +57,8 @@ from .tasks import (
     gitlab_mr_conflict_checker_task,
     jira_missing_priority_reminder_task,
     jira_closed_missing_resolution_task,
-    jira_missing_due_date_reminder_task
+    jira_missing_due_date_reminder_task,
+    gitlab_mr_delete_source_branch_checker_task
 )
 import logging
 
@@ -150,6 +151,7 @@ def setup_scheduler():
     scheduler.add_job(jira_missing_priority_reminder_task, 'cron', hour=13, minute=30, id="jira_missing_priority_reminder")
     scheduler.add_job(jira_closed_missing_resolution_task, 'cron', hour=13, minute=45, id="jira_closed_missing_resolution")
     scheduler.add_job(jira_missing_due_date_reminder_task, 'cron', hour=14, minute=45, id="jira_missing_due_date_reminder")
+    scheduler.add_job(gitlab_mr_delete_source_branch_checker_task, 'cron', hour=15, minute=30, id="gitlab_mr_delete_source_branch_checker")
 
     scheduler.add_job(
         jira_stale_in_progress_reminder_task,
