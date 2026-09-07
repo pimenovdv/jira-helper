@@ -4363,3 +4363,90 @@ async def gitlab_mr_delete_source_branch_checker_task():
             logger.error(f"Error processing project {project_id}: {e}")
 
     return "GitLab MR delete source branch checker task completed."
+
+
+async def gitlab_mr_stale_approval_reminder_task():
+    """
+    Checks open MRs in tracked GitLab projects.
+    If an MR has approvals but hasn't been updated for > 3 days, it leaves an automated comment
+    reminding the team to merge it.
+    """
+    import logging
+    from datetime import datetime, timezone
+    import dateutil.parser
+    from langchain_core.messages import HumanMessage, SystemMessage
+    # Use global imports so mocker can patch them in app.tasks
+    global GitLabClient, ChatOpenAI, settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR stale approval reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR stale approval reminder task.")
+        return "GitLab MR stale approval reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_STALE_APPROVAL_REMINDER -->"
+    now = datetime.now(timezone.utc)
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                if getattr(mr, 'draft', False) or getattr(mr, 'title', '').lower().startswith("draft:"):
+                    continue
+
+                updated_at_str = getattr(mr, "updated_at", None)
+                if not updated_at_str:
+                    continue
+
+                if updated_at_str.endswith('Z'):
+                    updated_at_str = updated_at_str[:-1] + '+00:00'
+                updated_at = datetime.fromisoformat(updated_at_str)
+
+                if updated_at.tzinfo is None:
+                    updated_at = updated_at.replace(tzinfo=timezone.utc)
+
+                days_inactive = (now - updated_at).days
+                if days_inactive <= 3:
+                    continue
+
+                try:
+                    approvals = mr.approvals.get()
+                    if not approvals.approved_by:
+                        continue
+                except Exception as e:
+                    logger.error(f"Failed to fetch approvals for MR !{mr.iid} in project {project_id}: {e}")
+                    continue
+
+                # Check if we already reminded them
+                notes = mr.notes.list(get_all=True)
+                already_reminded = any(reminder_marker in (note.body or "") for note in notes)
+
+                if already_reminded:
+                    logger.info(f"Skipping MR {mr.iid} in project {project_id}, already sent stale approval reminder.")
+                    continue
+
+                author_username = mr.author.get('username') if hasattr(mr, 'author') and mr.author else 'Author'
+
+                sys_prompt = SystemMessage(content="You are a helpful AI assistant. Generate a polite comment to remind the user to merge their Merge Request since it has approvals but hasn't been updated in days. Respond in Russian.")
+                user_prompt = HumanMessage(content=f"Write a short, polite message (max 3 sentences) addressing @{author_username} noting that MR {mr.iid} is approved and asking them to merge it if it is ready, or clarify if anything is blocking the merge.")
+
+                try:
+                    llm_response = await llm.ainvoke([sys_prompt, user_prompt])
+                    comment_body = f"{llm_response.content}\n\n{reminder_marker}"
+
+                    gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+                    logger.info(f"Added stale approval reminder to MR {mr.iid} in project {project_id}")
+                except Exception as e:
+                    logger.error(f"Error posting comment to MR {mr.iid}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing project {project_id}: {e}")
+
+    return "GitLab MR stale approval reminder task completed."
