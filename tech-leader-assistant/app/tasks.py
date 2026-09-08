@@ -1228,7 +1228,6 @@ async def gitlab_mr_missing_description_notifier_task():
     """
     import logging
     # Use global imports so mocker can patch them in app.tasks
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting GitLab empty MR description notifier task...")
@@ -1347,7 +1346,6 @@ async def gitlab_unresolved_threads_reminder_task():
     import logging
     from datetime import datetime, timezone
     import dateutil.parser
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting GitLab unresolved threads reminder task...")
@@ -1421,7 +1419,6 @@ async def gitlab_mr_cicd_failure_notifier_task():
     Generates a polite notification via LLM in Russian to fix the CI.
     """
     import logging
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting GitLab MR CI/CD failure notifier task...")
@@ -1806,7 +1803,6 @@ async def gitlab_mr_missing_reviewer_notifier_task():
     """
     import logging
     # Use global imports so mocker can patch them in app.tasks
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting GitLab MR missing reviewer notifier task...")
@@ -2001,7 +1997,6 @@ async def gitlab_mr_title_linter_task():
     import logging
     import re
 
-    global GitLabClient, ChatOpenAI, settings, HumanMessage
 
     logger = logging.getLogger(__name__)
     logger.info("Starting automated GitLab MR title linter task...")
@@ -2176,7 +2171,6 @@ async def gitlab_long_running_mr_reminder_task():
     from datetime import datetime, timezone
     import logging
 
-    global GitLabClient, ChatOpenAI, settings, HumanMessage
 
     logger = logging.getLogger(__name__)
     logger.info("Starting automated GitLab long-running MR reminder task...")
@@ -2607,7 +2601,6 @@ async def gitlab_mr_missing_assignee_notifier_task():
     """
     import logging
     from langchain_core.messages import HumanMessage
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting automated GitLab MR missing assignee notifier task...")
@@ -2794,7 +2787,6 @@ async def gitlab_mr_missing_milestone_notifier_task():
     """
     import logging
     # Use global imports so mocker can patch them in app.tasks
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting GitLab missing milestone notifier task...")
@@ -2984,7 +2976,6 @@ async def gitlab_mr_description_checklist_validator_task():
     """
     import logging
     from langchain_core.messages import HumanMessage, SystemMessage
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting automated GitLab MR description checklist validator task...")
@@ -3534,7 +3525,6 @@ async def gitlab_mr_wip_limit_reminder_task():
     import logging
     from collections import defaultdict
     from langchain_core.messages import HumanMessage
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     gitlab_client = GitLabClient()
@@ -3768,7 +3758,6 @@ async def gitlab_mr_missing_tests_checker_task():
     """
     import logging
     # Use global imports so mocker can patch them in app.tasks
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting GitLab MR missing tests checker task...")
@@ -3843,7 +3832,6 @@ async def gitlab_mr_missing_changelog_checker_task():
     """
     import logging
     # Use global imports so mocker can patch them in app.tasks
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting GitLab MR missing changelog checker task...")
@@ -3985,7 +3973,6 @@ async def gitlab_mr_description_template_validator_task():
     """
     import logging
     from langchain_core.messages import HumanMessage, SystemMessage
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting automated GitLab MR description template validator task...")
@@ -4051,7 +4038,6 @@ async def gitlab_mr_conflict_checker_task():
     """
     import logging
     from langchain_core.messages import HumanMessage, SystemMessage
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting automated GitLab MR conflict checker task...")
@@ -4376,7 +4362,6 @@ async def gitlab_mr_stale_approval_reminder_task():
     import dateutil.parser
     from langchain_core.messages import HumanMessage, SystemMessage
     # Use global imports so mocker can patch them in app.tasks
-    global GitLabClient, ChatOpenAI, settings
 
     logger = logging.getLogger(__name__)
     logger.info("Starting automated GitLab MR stale approval reminder task...")
@@ -4450,3 +4435,65 @@ async def gitlab_mr_stale_approval_reminder_task():
             logger.error(f"Error processing project {project_id}: {e}")
 
     return "GitLab MR stale approval reminder task completed."
+
+async def gitlab_mr_missing_milestone_reminder_task():
+    """
+    Checks open MRs in tracked GitLab projects.
+    If an MR doesn't have a milestone, it leaves an automated comment
+    reminding the team/author to set one.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage, SystemMessage
+    # Use global imports so mocker can patch them in app.tasks
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR missing milestone reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR missing milestone reminder task.")
+        return "GitLab MR missing milestone reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_MISSING_MILESTONE_REMINDER -->"
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                if getattr(mr, 'draft', False) or getattr(mr, 'title', '').lower().startswith("draft:"):
+                    continue
+
+                if getattr(mr, 'milestone', None) is not None:
+                    continue
+
+                # Check if we already reminded them
+                notes = mr.notes.list(get_all=True)
+                already_reminded = any(reminder_marker in (note.body or "") for note in notes)
+
+                if already_reminded:
+                    logger.info(f"Skipping MR {mr.iid} in project {project_id}, already sent missing milestone reminder.")
+                    continue
+
+                author_username = mr.author.get('username') if hasattr(mr, 'author') and mr.author else 'Author'
+
+                sys_prompt = SystemMessage(content="You are a helpful AI assistant. Generate a polite comment to remind the user to add a milestone to their Merge Request. Respond in Russian.")
+                user_prompt = HumanMessage(content=f"Write a short, polite message (max 2 sentences) addressing @{author_username} noting that MR {mr.iid} does not have a milestone and asking them to set one.")
+
+                try:
+                    llm_response = await llm.ainvoke([sys_prompt, user_prompt])
+                    comment_body = f"{llm_response.content}\n\n{reminder_marker}"
+
+                    gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+                    logger.info(f"Added missing milestone reminder to MR {mr.iid} in project {project_id}")
+                except Exception as e:
+                    logger.error(f"Error posting comment to MR {mr.iid}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing project {project_id}: {e}")
+
+    return "GitLab MR missing milestone reminder task completed."
