@@ -11,18 +11,11 @@
 
 ## Project Decomposition & Implementation Plan
 
-### Completed Phases (1-47)
+### Completed Phases (1-49)
 - [x] Initial setup, core sync, DB, agentic RAG workflows, Jira/GitLab maintenance.
 - [x] Automations for code quality, Code Health, Analytics, Validation.
-- [x] Assorted MR and Issue reminders, checkers, and summaries (stale approvals, due dates, branch deletion, WIP limits, etc).
+- [x] Assorted MR and Issue reminders, checkers, and summaries (stale approvals, due dates, branch deletion, WIP limits, missing milestones, subtask warnings, etc).
 
-### Phase 48: GitLab MR Missing Milestone Reminder
-- [x] Develop a task (`gitlab_mr_missing_milestone_reminder_task`) to check open MRs in tracked GitLab projects.
-- [x] Check if the MR lacks a milestone.
-- [x] If so, leave an automated comment using ChatOpenAI reminding the author to add a milestone.
-- [x] Register the task in the scheduler to run periodically.
-- [x] Add corresponding unit tests.
-
-### Phase 49: Jira Subtask Without Parent Warning
-- [ ] Develop a task to check for subtasks that do not belong to a parent issue.
-- [ ] Leave an automated comment warning the reporter.
+### Phase 50: Confluence Missing Owner Warning
+- [ ] Develop a task to check Confluence pages for missing owner tags.
+- [ ] Notify the creator to add an owner tag.

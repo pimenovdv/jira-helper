@@ -4497,3 +4497,61 @@ async def gitlab_mr_missing_milestone_reminder_task():
             logger.error(f"Error processing project {project_id}: {e}")
 
     return "GitLab MR missing milestone reminder task completed."
+
+async def jira_subtask_without_parent_warning_task():
+    """
+    Checks Jira subtasks that do not have a parent issue and adds an automated comment to warn the reporter.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+    from langchain_openai import ChatOpenAI
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira subtask without parent warning task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira subtask without parent warning task.")
+        return "Jira subtask without parent warning task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_SUBTASK_WITHOUT_PARENT -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND issuetype in subtaskIssueTypes() AND statusCategory != Done'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {project_key}: {e}")
+            continue
+
+        for issue in issues:
+            if getattr(issue.fields, 'parent', None) is None:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(
+                    reminder_marker in getattr(c, 'body', '') for c in comments
+                )
+
+                if not already_reminded:
+                    logger.info(f"Subtask {issue.key} has no parent. Adding a reminder.")
+                    prompt = (
+                        f"The Jira subtask '{issue.key}' does not have a parent issue. "
+                        "Please write a short, polite note asking the reporter to link this subtask to its parent issue, "
+                        "as subtasks should not exist independently."
+                    )
+
+                    try:
+                        response = llm.invoke([HumanMessage(content=prompt)])
+                        comment_body = f"{response.content}\n\n{reminder_marker}"
+                        jira_client.add_comment(issue.key, comment_body)
+                    except Exception as e:
+                        logger.error(f"Failed to generate or add comment for {issue.key}: {e}")
+
+    logger.info("Jira subtask without parent warning task completed.")
+    return "Jira subtask without parent warning task completed"
