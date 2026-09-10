@@ -17,5 +17,9 @@
 - [x] Assorted MR and Issue reminders, checkers, and summaries (stale approvals, due dates, branch deletion, WIP limits, missing milestones, subtask warnings, etc).
 
 ### Phase 50: Confluence Missing Owner Warning
-- [ ] Develop a task to check Confluence pages for missing owner tags.
-- [ ] Notify the creator to add an owner tag.
+- [x] Develop a task to check Confluence pages for missing owner tags.
+- [x] Notify the creator to add an owner tag.
+
+### Phase 51: GitLab Stale Thread Reminder
+- [ ] Develop a task to check open MRs for unresolved threads older than a configured threshold.
+- [ ] Notify the thread author or the MR author to resolve the stale thread.
