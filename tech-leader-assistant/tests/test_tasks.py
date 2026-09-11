@@ -2,12 +2,9 @@ import pytest
 from unittest.mock import MagicMock
 
 from app.tasks import gitlab_mr_missing_assignee_notifier_task, jira_missing_labels_reminder_task, gitlab_stale_draft_mr_closer_task
-from app.tasks import gitlab_unresolved_threads_reminder_task, jira_sync_task, confluence_auto_link_task, opensearch_ingestion_task, generate_release_notes_task
+from app.tasks import jira_sync_task, confluence_auto_link_task, opensearch_ingestion_task, generate_release_notes_task
 import app.tasks as tasks
-from datetime import datetime, timezone, timedelta, timezone, timedelta
-
-from app.tasks import gitlab_mr_missing_assignee_notifier_task, jira_missing_labels_reminder_task, gitlab_stale_draft_mr_closer_task
-from app.tasks import gitlab_unresolved_threads_reminder_task, jira_sync_task, confluence_auto_link_task, opensearch_ingestion_task, generate_release_notes_task
+from datetime import datetime, timezone, timedelta
 
 @pytest.fixture(autouse=True)
 def mock_astext(monkeypatch):
@@ -859,62 +856,6 @@ def mock_settings(mocker):
     mocker.patch.object(tasks, 'settings', mock)
     return mock
 
-@pytest.mark.asyncio
-async def test_gitlab_unresolved_threads_reminder_task(mocker, mock_settings):
-    # Mock LLM
-    mock_llm_instance = MagicMock()
-    mock_response = MagicMock()
-    mock_response.content = "Reminder comment"
-    mock_llm_instance.ainvoke = mocker.AsyncMock(return_value=mock_response)
-    mock_chat_openai = mocker.patch.object(tasks, 'ChatOpenAI', return_value=mock_llm_instance)
-
-    # Mock GitLab
-    mock_gitlab_client_class = mocker.patch.object(tasks, 'GitLabClient')
-    mock_client_instance = mock_gitlab_client_class.return_value
-    mock_project = MagicMock()
-    mock_client_instance.client.projects.get.return_value = mock_project
-
-    mock_mr = MagicMock()
-    mock_mr.title = "Test MR"
-    mock_mr.iid = 1
-    mock_project.mergerequests.list.return_value = [mock_mr]
-
-    # Create a discussion with notes
-    mock_discussion = MagicMock()
-    # 4 days ago
-    past_date = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
-    mock_discussion.attributes = {
-        'notes': [
-            {
-                'resolvable': True,
-                'resolved': False,
-                'updated_at': past_date,
-                'body': 'First note'
-            }
-        ]
-    }
-
-    mock_mr.discussions.list.return_value = [mock_discussion]
-
-    # Run task
-    result = await gitlab_unresolved_threads_reminder_task()
-
-    assert result == "GitLab unresolved threads reminder task completed"
-    mock_discussion.notes.create.assert_called_once_with({'body': 'Reminder comment'})
-    assert mock_llm_instance.ainvoke.call_count == 1
-
-    # Test skipping logic - already reminded
-    mock_discussion.notes.create.reset_mock()
-    mock_llm_instance.ainvoke.reset_mock()
-
-    mock_discussion.attributes['notes'].append({
-        'body': '<!-- AUTO_GENERATED_UNRESOLVED_THREAD_REMINDER -->'
-    })
-
-    await gitlab_unresolved_threads_reminder_task()
-    mock_discussion.notes.create.assert_not_called()
-    mock_llm_instance.invoke.assert_not_called()
-
 @pytest.fixture
 def mock_settings(mocker):
     mock = MagicMock()
@@ -922,132 +863,6 @@ def mock_settings(mocker):
     mocker.patch.object(tasks, 'settings', mock)
     return mock
 
-@pytest.mark.asyncio
-async def test_gitlab_unresolved_threads_reminder_task(mocker, mock_settings):
-    # Mock LLM
-    mock_llm_instance = MagicMock()
-    mock_response = MagicMock()
-    mock_response.content = "Reminder comment"
-    mock_llm_instance.ainvoke = mocker.AsyncMock(return_value=mock_response)
-    mock_chat_openai = mocker.patch.object(tasks, 'ChatOpenAI', return_value=mock_llm_instance)
-
-    # Mock GitLab
-    mock_gitlab_client_class = mocker.patch.object(tasks, 'GitLabClient')
-    mock_client_instance = mock_gitlab_client_class.return_value
-    mock_project = MagicMock()
-    mock_client_instance.client.projects.get.return_value = mock_project
-
-    mock_mr = MagicMock()
-    mock_mr.title = "Test MR"
-    mock_mr.iid = 1
-    mock_project.mergerequests.list.return_value = [mock_mr]
-
-    # Create a discussion with notes
-    mock_discussion = MagicMock()
-    # 4 days ago
-    past_date = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
-    mock_discussion.attributes = {
-        'notes': [
-            {
-                'resolvable': True,
-                'resolved': False,
-                'updated_at': past_date,
-                'body': 'First note'
-            }
-        ]
-    }
-
-    mock_mr.discussions.list.return_value = [mock_discussion]
-
-    # Run task
-    result = await gitlab_unresolved_threads_reminder_task()
-
-    assert result == "GitLab unresolved threads reminder task completed"
-    mock_discussion.notes.create.assert_called_once_with({'body': 'Reminder comment'})
-    assert mock_llm_instance.ainvoke.call_count == 1
-
-    # Test skipping logic - already reminded
-    mock_discussion.notes.create.reset_mock()
-    mock_llm_instance.ainvoke.reset_mock()
-
-    mock_discussion.attributes['notes'].append({
-        'body': '<!-- AUTO_GENERATED_UNRESOLVED_THREAD_REMINDER -->'
-    })
-
-    await gitlab_unresolved_threads_reminder_task()
-    mock_discussion.notes.create.assert_not_called()
-    mock_llm_instance.invoke.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_gitlab_unresolved_threads_reminder_task(mocker):
-    # Mock settings
-    def mock_settings_get(key, default=""):
-        if key == "GITLAB_TRACKED_PROJECTS":
-            return "123"
-        elif key == "OPENAI_API_KEY":
-            return "fake_key"
-        return default
-
-    mock_settings = mocker.MagicMock()
-    mock_settings.get.side_effect = mock_settings_get
-
-    mocker.patch('app.tasks.settings', mock_settings)
-
-    # Mock LLM
-    mock_llm_instance = MagicMock()
-    mock_response = MagicMock()
-    mock_response.content = "Reminder comment"
-    mock_llm_instance.ainvoke = mocker.AsyncMock(return_value=mock_response)
-    mocker.patch('app.tasks.ChatOpenAI', return_value=mock_llm_instance)
-
-
-    # Mock GitLab
-    mock_gitlab_client_class = mocker.patch('app.tasks.GitLabClient')
-    mock_client_instance = mock_gitlab_client_class.return_value
-    mock_project = MagicMock()
-    mock_client_instance.client.projects.get.return_value = mock_project
-
-    mock_mr = MagicMock()
-    mock_mr.title = "Test MR"
-    mock_mr.iid = 1
-    mock_project.mergerequests.list.return_value = [mock_mr]
-
-    # Create a discussion with notes
-    mock_discussion = MagicMock()
-    # 4 days ago
-    past_date = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
-    mock_discussion.attributes = {
-        'notes': [
-            {
-                'resolvable': True,
-                'resolved': False,
-                'updated_at': past_date,
-                'body': 'First note'
-            }
-        ]
-    }
-
-    mock_mr.discussions.list.return_value = [mock_discussion]
-
-    # Run task
-    result = await gitlab_unresolved_threads_reminder_task()
-
-    assert result == "GitLab unresolved threads reminder task completed"
-    mock_discussion.notes.create.assert_called_once_with({'body': 'Reminder comment'})
-    assert mock_llm_instance.ainvoke.call_count == 1
-
-    # Test skipping logic - already reminded
-    mock_discussion.notes.create.reset_mock()
-    mock_llm_instance.ainvoke.reset_mock()
-
-    mock_discussion.attributes['notes'].append({
-        'body': '<!-- AUTO_GENERATED_UNRESOLVED_THREAD_REMINDER -->'
-    })
-
-    await gitlab_unresolved_threads_reminder_task()
-    mock_discussion.notes.create.assert_not_called()
-    mock_llm_instance.invoke.assert_not_called()
 import pytest
 from app.tasks import jira_sprint_unassigned_task_reminder_task
 
