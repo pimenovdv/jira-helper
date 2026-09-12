@@ -4646,3 +4646,85 @@ async def confluence_missing_owner_warning_task():
             logger.error(f"Error processing Confluence space {space} for missing owner tags: {e}")
 
     return "Confluence missing owner warning task completed."
+async def gitlab_stale_thread_reminder_task():
+    """
+    Iterates over open MRs for tracked projects.
+    Checks for discussions (threads) that are unresolved and have not been updated for a configured threshold (default 3 days).
+    Generates a gentle reminder via LLM (in Russian) targeting the thread author or the MR author to resolve the stale thread,
+    and posts it as a reply to the thread.
+    """
+    import logging
+    from datetime import datetime, timezone
+    import dateutil.parser
+    from app.clients.gitlab_client import GitLabClient
+    from langchain_openai import ChatOpenAI
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab stale thread reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping stale threads reminder.")
+        return "GitLab stale thread reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    gitlab_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [p.strip() for p in gitlab_projects if p.strip()]
+    stale_threshold = int(settings.get("GITLAB_STALE_THREAD_THRESHOLD_DAYS", "3"))
+
+    client = GitLabClient()
+    reminder_marker = "<!-- AUTO_GENERATED_STALE_THREAD_REMINDER -->"
+    now = datetime.now(timezone.utc)
+
+    for project_id in gitlab_projects:
+        try:
+            project = client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                try:
+                    discussions = mr.discussions.list(get_all=True)
+                    for discussion in discussions:
+                        notes = discussion.attributes.get('notes', [])
+                        if not notes:
+                            continue
+
+                        first_note = notes[0]
+                        if not first_note.get('resolvable'):
+                            continue
+
+                        is_resolved = any(n.get('resolved', False) for n in notes)
+                        if is_resolved:
+                            continue
+
+                        last_updated_str = max((n.get('updated_at') for n in notes if n.get('updated_at')), default=None)
+                        if not last_updated_str:
+                            continue
+
+                        last_updated = dateutil.parser.isoparse(last_updated_str)
+                        days_inactive = (now - last_updated).days
+
+                        if days_inactive >= stale_threshold:
+                            already_reminded = any(reminder_marker in note.get('body', '') for note in notes)
+                            if not already_reminded:
+                                thread_author = first_note.get('author', {}).get('username', 'author')
+                                mr_author = mr.author.get('username', 'MR author')
+
+                                prompt = (
+                                    f"Generate a short, polite comment in Russian to remind @{thread_author} and/or @{mr_author} "
+                                    f"about an unresolved discussion in the Merge Request '{mr.title}' that hasn't been updated for {days_inactive} days. "
+                                    f"Ask them to resolve the thread or continue the conversation. "
+                                    f"Include this exact invisible HTML marker anywhere in your response: {reminder_marker}"
+                                )
+                                response = await llm.ainvoke(prompt)
+                                discussion.notes.create({'body': response.content})
+                                logger.info(f"Added stale thread reminder to MR {mr.iid} in project {project_id}")
+                except Exception as e:
+                    logger.error(f"Error checking discussions for MR {mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing project {project_id} in stale threads reminder task: {e}")
+
+    logger.info("Finished GitLab stale thread reminder task.")
+    return "GitLab stale thread reminder task completed"
