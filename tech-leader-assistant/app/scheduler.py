@@ -62,7 +62,8 @@ from .tasks import (
     gitlab_mr_delete_source_branch_checker_task,
     gitlab_mr_stale_approval_reminder_task,
     gitlab_mr_missing_milestone_reminder_task,
-    jira_subtask_without_parent_warning_task
+    jira_subtask_without_parent_warning_task,
+    gitlab_stale_thread_reminder_task
 )
 import logging
 
@@ -160,6 +161,7 @@ def setup_scheduler():
     scheduler.add_job(gitlab_mr_stale_approval_reminder_task, 'cron', hour=15, minute=45, id="gitlab_mr_stale_approval_reminder")
     scheduler.add_job(gitlab_mr_missing_milestone_reminder_task, 'cron', hour='*/6', minute=30, id="gitlab_mr_missing_milestone_reminder")
     scheduler.add_job(jira_subtask_without_parent_warning_task, 'cron', hour='*/6', minute=0, id="jira_subtask_without_parent_warning")
+    scheduler.add_job(gitlab_stale_thread_reminder_task, 'cron', hour='*/8', minute=0, id="gitlab_stale_thread_reminder")
 
     scheduler.add_job(
         jira_stale_in_progress_reminder_task,
