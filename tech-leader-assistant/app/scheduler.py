@@ -1,5 +1,6 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .tasks import (
+    gitlab_mr_missing_release_notes_checker_task,
     confluence_author_summary_task,
     gitlab_mr_missing_labels_notifier_task,
     jira_high_complexity_warning_task,
@@ -171,6 +172,16 @@ def setup_scheduler():
         id="jira_stale_in_progress_reminder_job",
         replace_existing=True,
     )
+
+    scheduler.add_job(
+        gitlab_mr_missing_release_notes_checker_task,
+        'cron',
+        hour='*/4',
+        minute=30,
+        id="gitlab_mr_missing_release_notes_checker",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
 
 def start_scheduler():
