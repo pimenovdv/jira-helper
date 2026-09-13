@@ -4728,3 +4728,72 @@ async def gitlab_stale_thread_reminder_task():
 
     logger.info("Finished GitLab stale thread reminder task.")
     return "GitLab stale thread reminder task completed"
+async def gitlab_mr_missing_release_notes_checker_task():
+    """
+    Iterates over open MRs for tracked projects.
+    Checks if an MR introduces user-facing changes but lacks 'Release Notes' in its description.
+    If so, generates a polite notification via LLM in Russian asking to add a Release Notes section.
+    """
+    import logging
+    import re
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab MR missing release notes checker task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping missing release notes checker.")
+        return "GitLab MR missing release notes checker task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    gitlab_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    gitlab_projects = [p.strip() for p in gitlab_projects if p.strip()]
+
+    client = GitLabClient()
+    reminder_marker = "<!-- AUTO_GENERATED_MISSING_RELEASE_NOTES_COMMENT -->"
+
+    # Regex for user-facing changes based on conventional commits or Jira prefixes
+    user_facing_pattern = re.compile(r"^(feat|fix|perf)(\([a-zA-Z0-9_-]+\))?: .+|^[A-Z]+-[0-9]+ .+", re.IGNORECASE)
+
+    for project_id in gitlab_projects:
+        try:
+            project = client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                title = getattr(mr, 'title', '')
+                description = getattr(mr, 'description', '') or ''
+
+                if getattr(mr, 'draft', False) or title.lower().startswith("draft:"):
+                    continue
+
+                if not user_facing_pattern.match(title):
+                    continue
+
+                if "release notes" in description.lower() or "release_notes" in description.lower():
+                    continue
+
+                try:
+                    notes = mr.notes.list(get_all=True)
+                    already_reminded = any(reminder_marker in (note.body or "") for note in notes)
+
+                    if not already_reminded:
+                        author = mr.author.get('username', 'author') if hasattr(mr, 'author') and isinstance(mr.author, dict) else 'author'
+                        prompt = (
+                            f"Generate a short, polite comment in Russian addressing @{author}. "
+                            f"The Merge Request '{title}' introduces user-facing changes (e.g. feature, fix, or Jira ticket) "
+                            f"but the description is missing a 'Release Notes' section. "
+                            f"Ask them to please add a Release Notes section to the MR description. "
+                            f"Include this exact invisible HTML marker anywhere in your response: {reminder_marker}"
+                        )
+                        response = await llm.ainvoke(prompt)
+                        client.create_mr_note(project_id, mr.iid, response.content)
+                        logger.info(f"Added missing release notes reminder to MR {mr.iid} in project {project_id}")
+                except Exception as e:
+                    logger.error(f"Error checking notes for MR {mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing project {project_id} in missing release notes checker task: {e}")
+
+    logger.info("Finished GitLab MR missing release notes checker task.")
+    return "GitLab MR missing release notes checker task completed"
