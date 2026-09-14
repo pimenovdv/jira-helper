@@ -4797,3 +4797,121 @@ async def gitlab_mr_missing_release_notes_checker_task():
 
     logger.info("Finished GitLab MR missing release notes checker task.")
     return "GitLab MR missing release notes checker task completed"
+
+
+async def confluence_stale_documentation_archiver_task():
+    """
+    Checks tracked Confluence spaces for pages with 'draft' or 'wip' labels that haven't been updated in over 180 days.
+    If such a page is found, it adds an 'archived' label, prefixes the title with '[ARCHIVED] ',
+    and leaves a comment tagging the last author.
+    """
+    import logging
+    from datetime import datetime, timezone, timedelta
+    from app.clients.confluence_client import ConfluenceClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Confluence stale documentation archiver task...")
+
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+    if not tracked_spaces or not tracked_spaces[0].strip():
+        logger.info("No CONFLUENCE_TRACKED_SPACES configured. Skipping task.")
+        return "Confluence stale documentation archiver task skipped (no spaces configured)"
+
+    confluence_client = ConfluenceClient()
+    stale_threshold = datetime.now(timezone.utc) - timedelta(days=180)
+    marker = "<!-- AUTO_GENERATED_CONFLUENCE_ARCHIVER -->"
+    archived_pages = []
+
+    for space in tracked_spaces:
+        space = space.strip()
+        if not space:
+            continue
+        try:
+            pages_response = confluence_client.client.get_all_pages_from_space(space, expand="version,history.lastUpdated,body.storage", start=0, limit=100)
+            pages = []
+            if isinstance(pages_response, list):
+                pages = pages_response
+            elif isinstance(pages_response, dict) and "results" in pages_response:
+                pages = pages_response["results"]
+
+            for page in pages:
+                page_id = page.get("id")
+                title = page.get("title", "Untitled")
+
+                # Skip already archived pages to prevent re-archiving
+                if title.startswith("[ARCHIVED] "):
+                    continue
+
+                version_info = page.get("version", {})
+                when_str = version_info.get("when")
+
+                if not when_str:
+                    continue
+
+                try:
+                    when_dt = datetime.strptime(when_str[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+                    if when_dt < stale_threshold:
+                        # Check labels
+                        labels_response = confluence_client.client.get_page_labels(page_id)
+                        labels = []
+                        if isinstance(labels_response, dict) and "results" in labels_response:
+                            labels = [lbl.get("name", "").lower() for lbl in labels_response["results"]]
+                        elif isinstance(labels_response, list):
+                            labels = [lbl.get("name", "").lower() for lbl in labels_response]
+
+                        if "draft" in labels or "wip" in labels:
+                            # It's a stale draft/wip. Time to archive!
+
+                            # 1. Add 'archived' label
+                            if "archived" not in labels:
+                                confluence_client.client.set_page_label(page_id, "archived")
+
+                            # 2. Prefix title with [ARCHIVED]
+                            new_title = f"[ARCHIVED] {title}"
+                            current_version = version_info.get("number", 1)
+                            body_storage = page.get("body", {}).get("storage", {}).get("value", "")
+
+                            update_data = {
+                                "id": page_id,
+                                "type": "page",
+                                "title": new_title,
+                                "space": {"key": space},
+                                "body": {
+                                    "storage": {
+                                        "value": body_storage,
+                                        "representation": "storage"
+                                    }
+                                },
+                                "version": {"number": current_version + 1}
+                            }
+                            confluence_client.client.update_page(page_id, new_title, body_storage, parent_id=None, type='page', representation='storage', minor_edit=False, version_comment='Auto-archived stale documentation')
+
+                            # 3. Add comment tagging the last author
+                            history = page.get("history", {})
+                            last_updated = history.get("lastUpdated", {})
+                            by = last_updated.get("by", {})
+                            account_id = by.get("accountId")
+
+                            if account_id:
+                                tag = f"[~accountid:{account_id}]"
+                                comment_body = (
+                                    f"{marker}\n"
+                                    f"<p>Hello {tag},</p>"
+                                    f"<p>This page has been automatically archived because it had the <code>draft</code> or <code>wip</code> label and hasn't been updated in over 6 months.</p>"
+                                )
+                            else:
+                                comment_body = (
+                                    f"{marker}\n"
+                                    f"<p>This page has been automatically archived because it had the <code>draft</code> or <code>wip</code> label and hasn't been updated in over 6 months.</p>"
+                                )
+
+                            confluence_client.client.add_comment(page_id, comment_body)
+                            logger.info(f"Archived Confluence page: {title} (ID: {page_id})")
+                            archived_pages.append(page_id)
+                except ValueError:
+                    logger.warning(f"Could not parse date {when_str} for page {title}")
+        except Exception as e:
+            logger.error(f"Error checking space {space} for stale documentation: {e}")
+
+    return f"Confluence stale documentation archiver task completed. Archived {len(archived_pages)} pages."
