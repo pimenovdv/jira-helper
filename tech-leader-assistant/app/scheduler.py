@@ -64,7 +64,8 @@ from .tasks import (
     gitlab_mr_stale_approval_reminder_task,
     gitlab_mr_missing_milestone_reminder_task,
     jira_subtask_without_parent_warning_task,
-    gitlab_stale_thread_reminder_task
+    gitlab_stale_thread_reminder_task,
+    confluence_stale_documentation_archiver_task
 )
 import logging
 
@@ -182,7 +183,17 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        confluence_stale_documentation_archiver_task,
+        "cron",
+        hour=7,
+        minute=0,
+        id="confluence_stale_documentation_archiver_job",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
+
 
 def start_scheduler():
     """Starts the APScheduler."""
