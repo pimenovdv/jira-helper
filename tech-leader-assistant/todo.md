@@ -12,9 +12,9 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-52: Initial setup, core sync, DB, RAG workflows, code quality automations, and assorted Jira/GitLab/Confluence reminders and checks.
+- [x] Phases 1-53: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, and Confluence stale documentation archiver.
 
-### Phase 53: Confluence Stale Documentation Archiver
-- [x] Develop a task that identifies Confluence pages with the 'draft' or 'wip' label that haven't been updated in 6 months.
-- [x] Automatically add an 'archived' label and prefix the page title with '[ARCHIVED]'.
-- [x] Leave a comment tagging the last author explaining why it was archived.
+### Phase 54: Jira Unassigned Bug Reminder
+- [x] Develop a task `jira_unassigned_bug_reminder_task` that identifies Jira "Bug" issues that are unassigned, not done, and older than 2 days.
+- [x] Automatically add a comment to these issues reminding the team to assign and triage them.
+- [x] Include an auto-generated HTML marker to avoid duplicate comments.
