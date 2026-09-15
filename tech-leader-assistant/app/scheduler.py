@@ -65,7 +65,8 @@ from .tasks import (
     gitlab_mr_missing_milestone_reminder_task,
     jira_subtask_without_parent_warning_task,
     gitlab_stale_thread_reminder_task,
-    confluence_stale_documentation_archiver_task
+    confluence_stale_documentation_archiver_task,
+    jira_unassigned_bug_reminder_task,
 )
 import logging
 
@@ -189,6 +190,15 @@ def setup_scheduler():
         hour=7,
         minute=0,
         id="confluence_stale_documentation_archiver_job",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jira_unassigned_bug_reminder_task,
+        "cron",
+        hour=9,
+        minute=0,
+        id="jira_unassigned_bug_reminder_job",
         replace_existing=True,
     )
 

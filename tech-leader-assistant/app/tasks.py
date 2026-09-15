@@ -4915,3 +4915,39 @@ async def confluence_stale_documentation_archiver_task():
             logger.error(f"Error checking space {space} for stale documentation: {e}")
 
     return f"Confluence stale documentation archiver task completed. Archived {len(archived_pages)} pages."
+
+async def jira_unassigned_bug_reminder_task():
+    """
+    Finds "Bug" issues in Jira that are unassigned, not done, and older than 2 days.
+    Adds a reminder comment to assign and triage them.
+    """
+    logger.info("Running Jira unassigned bug reminder task.")
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_UNASSIGNED_BUG_REMINDER -->"
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND issuetype = "Bug" AND statusCategory != "Done" AND created <= -2d'
+        issues = jira_client.search_issues(jql)
+
+        for issue in issues:
+            if getattr(issue.fields, "assignee", None) is not None:
+                continue
+
+            comments = jira_client.get_comments(issue.key)
+            already_reminded = any(marker in getattr(c, "body", "") for c in comments)
+
+            if not already_reminded:
+                logger.info(f"Adding unassigned bug reminder to {issue.key}")
+                comment_body = (
+                    f"Reminder: This bug is unassigned and was created over 2 days ago. "
+                    f"Please assign and triage it.\n\n{marker}"
+                )
+                jira_client.add_comment(issue.key, comment_body)
+
+    return "Jira unassigned bug reminder task completed."
