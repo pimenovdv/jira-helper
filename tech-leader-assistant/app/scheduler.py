@@ -67,6 +67,8 @@ from .tasks import (
     gitlab_stale_thread_reminder_task,
     confluence_stale_documentation_archiver_task,
     jira_unassigned_bug_reminder_task,
+    gitlab_mr_missing_description_reminder_task,
+    jira_epic_completion_checker_task,
 )
 import logging
 
@@ -172,6 +174,24 @@ def setup_scheduler():
         hour=9,
         minute=0,
         id="jira_stale_in_progress_reminder_job",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        gitlab_mr_missing_description_reminder_task,
+        "cron",
+        hour=10,
+        minute=0,
+        id="gitlab_mr_missing_description_reminder_job",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jira_epic_completion_checker_task,
+        "cron",
+        hour=11,
+        minute=0,
+        id="jira_epic_completion_checker_job",
         replace_existing=True,
     )
 

@@ -4951,3 +4951,94 @@ async def jira_unassigned_bug_reminder_task():
                 jira_client.add_comment(issue.key, comment_body)
 
     return "Jira unassigned bug reminder task completed."
+
+async def gitlab_mr_missing_description_reminder_task():
+    """
+    Finds open GitLab Merge Requests that lack a meaningful description (empty or < 10 chars).
+    Adds a reminder comment to provide a detailed description.
+    """
+    logger.info("Running GitLab MR missing description reminder task.")
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_MISSING_DESC_REMINDER -->"
+
+    for project_id in tracked_projects:
+        project_id = project_id.strip()
+        if not project_id:
+            continue
+        try:
+            mrs = gitlab_client.get_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                if getattr(mr, 'draft', False) or getattr(mr, 'title', '').lower().startswith("draft:"):
+                    continue
+
+                description = getattr(mr, "description", "") or ""
+                if len(description.strip()) < 10:
+                    notes = gitlab_client.get_mr_notes(project_id, mr.iid)
+                    already_reminded = any(marker in getattr(note, "body", "") for note in notes)
+
+                    if not already_reminded:
+                        logger.info(f"Adding missing description reminder to MR !{mr.iid} in project {project_id}")
+                        comment_body = (
+                            f"Reminder: This Merge Request seems to lack a meaningful description. "
+                            f"Please provide detailed information about the changes.\n\n{marker}"
+                        )
+                        gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+        except Exception as e:
+            logger.error(f"Error processing missing description reminders for project {project_id}: {e}")
+
+    return "GitLab MR missing description reminder task completed."
+
+async def jira_epic_completion_checker_task():
+    """
+    Finds Epics where all child issues are done, but the Epic itself is not done.
+    Adds a reminder comment to close the Epic.
+    """
+    logger.info("Running Jira epic completion checker task.")
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_EPIC_COMPLETION_REMINDER -->"
+
+    for project_key in tracked_projects:
+        project_key = project_key.strip()
+        if not project_key:
+            continue
+        try:
+            # Find open epics
+            jql = f'project = "{project_key}" AND issuetype = "Epic" AND statusCategory != "Done"'
+            epics = jira_client.search_issues(jql)
+
+            for epic in epics:
+                # Find children of this epic
+                child_jql = f'"Epic Link" = {epic.key} OR parent = {epic.key}'
+                children = jira_client.search_issues(child_jql)
+
+                if not children:
+                    continue
+
+                all_done = all(
+                    getattr(child.fields.status.statusCategory, "name", "") == "Done"
+                    for child in children
+                )
+
+                if all_done:
+                    comments = jira_client.get_comments(epic.key)
+                    already_reminded = any(marker in getattr(c, "body", "") for c in comments)
+
+                    if not already_reminded:
+                        logger.info(f"Adding Epic completion reminder to {epic.key}")
+                        comment_body = (
+                            f"Reminder: All child issues for this Epic are completed. "
+                            f"Please consider marking this Epic as Done.\n\n{marker}"
+                        )
+                        jira_client.add_comment(epic.key, comment_body)
+        except Exception as e:
+            logger.error(f"Error processing epic completion reminders for project {project_key}: {e}")
+
+    return "Jira epic completion checker task completed."
