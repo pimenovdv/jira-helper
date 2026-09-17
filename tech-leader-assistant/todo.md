@@ -12,14 +12,9 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-54: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, and Jira unassigned bug reminder.
+- [x] Phases 1-56: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, and Jira epic completion checker.
 
-### Phase 55: GitLab MR Missing Description Reminder
-- [x] Develop a task `gitlab_mr_missing_description_reminder_task` that identifies open GitLab Merge Requests lacking a meaningful description (e.g., empty or < 10 characters).
-- [x] Automatically add a comment to these MRs reminding the author to provide a detailed description.
-- [x] Include an auto-generated HTML marker `<!-- AUTO_GENERATED_MISSING_DESC_REMINDER -->` to avoid duplicate comments.
-
-### Phase 56: Jira Epic Completion Checker
-- [x] Create `jira_epic_completion_checker_task` to find Epics where all child issues are done, but the Epic itself is not marked as Done.
-- [x] Add a comment to the Epic reminding the assignee or creator to close it.
-- [x] Include an auto-generated HTML marker `<!-- AUTO_GENERATED_EPIC_COMPLETION_REMINDER -->`.
+### Phase 57: Jira Too Many Subtasks Warning
+- [x] Create `jira_too_many_subtasks_warning_task` to identify Jira issues (excluding Epics and Sub-tasks) that have 10 or more sub-tasks.
+- [x] Add a comment suggesting the issue might be too large and could be converted into an Epic.
+- [x] Include an auto-generated HTML marker `<!-- AUTO_GENERATED_TOO_MANY_SUBTASKS_WARNING -->`.

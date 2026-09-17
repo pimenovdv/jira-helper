@@ -1,5 +1,6 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from .tasks import (
+    jira_too_many_subtasks_warning_task,
     gitlab_mr_missing_release_notes_checker_task,
     confluence_author_summary_task,
     gitlab_mr_missing_labels_notifier_task,
@@ -221,6 +222,14 @@ def setup_scheduler():
         id="jira_unassigned_bug_reminder_job",
         replace_existing=True,
     )
+    scheduler.add_job(
+        jira_too_many_subtasks_warning_task,
+        'interval',
+        hours=24,
+        id='jira_too_many_subtasks_warning_task',
+        replace_existing=True
+    )
+
 
     logger.info("APScheduler jobs configured.")
 
@@ -229,6 +238,7 @@ def start_scheduler():
     """Starts the APScheduler."""
     if not scheduler.running:
         setup_scheduler()
+
         scheduler.start()
         logger.info("APScheduler started.")
 

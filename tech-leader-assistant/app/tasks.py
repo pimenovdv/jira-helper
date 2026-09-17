@@ -5042,3 +5042,42 @@ async def jira_epic_completion_checker_task():
             logger.error(f"Error processing epic completion reminders for project {project_key}: {e}")
 
     return "Jira epic completion checker task completed."
+
+async def jira_too_many_subtasks_warning_task():
+    """
+    Phase 57: Jira Too Many Subtasks Warning
+    Finds Jira issues (excluding Epics and Sub-tasks) that have 10 or more sub-tasks.
+    Adds a comment suggesting the issue might be too large and could be converted into an Epic.
+    """
+    from app.clients.jira_client import JiraClient
+    jira_client = JiraClient()
+
+    # We want issues that are not Sub-tasks and not Epics.
+    # In Jira, Sub-tasks are usually type "Sub-task" and Epics are type "Epic".
+    # Using JQL to find standard issues that might have subtasks.
+    # We also only care about unresolved issues.
+    jql = "resolution = Unresolved AND issuetype not in (Epic, Sub-task)"
+    issues = jira_client.search_issues(jql)
+    if not issues:
+        return
+
+    marker = "<!-- AUTO_GENERATED_TOO_MANY_SUBTASKS_WARNING -->"
+
+    for issue in issues:
+        subtasks = getattr(issue.fields, "subtasks", [])
+        if len(subtasks) >= 10:
+            comments = jira_client.get_comments(issue.key)
+            already_commented = False
+            for comment in comments:
+                if marker in getattr(comment, "body", ""):
+                    already_commented = True
+                    break
+
+            if not already_commented:
+                body = (
+                    f"Hi {getattr(issue.fields.assignee, 'displayName', 'Assignee') if getattr(issue.fields, 'assignee', None) else 'Creator'},\n\n"
+                    f"This issue has {len(subtasks)} sub-tasks, which is quite a lot. "
+                    f"Consider if this issue is too large and should be converted into an Epic instead.\n"
+                    f"{marker}"
+                )
+                jira_client.add_comment(issue.key, body)
