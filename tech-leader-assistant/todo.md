@@ -12,9 +12,9 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-56: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, and Jira epic completion checker.
+- [x] Phases 1-57: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, Jira epic completion checker, and Jira too many subtasks warning.
 
-### Phase 57: Jira Too Many Subtasks Warning
-- [x] Create `jira_too_many_subtasks_warning_task` to identify Jira issues (excluding Epics and Sub-tasks) that have 10 or more sub-tasks.
-- [x] Add a comment suggesting the issue might be too large and could be converted into an Epic.
-- [x] Include an auto-generated HTML marker `<!-- AUTO_GENERATED_TOO_MANY_SUBTASKS_WARNING -->`.
+### Phase 58: Jira Unassigned Epic Warning
+- [x] Create `jira_unassigned_epic_warning_task` to identify Jira Epics that are unresolved and unassigned.
+- [x] Add a comment suggesting the Epic needs an owner to drive its completion.
+- [x] Include an auto-generated HTML marker `<!-- AUTO_GENERATED_UNASSIGNED_EPIC_WARNING -->`.

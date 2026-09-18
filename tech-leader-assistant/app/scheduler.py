@@ -230,6 +230,15 @@ def setup_scheduler():
         replace_existing=True
     )
 
+    from app.tasks import jira_unassigned_epic_warning_task
+    scheduler.add_job(
+        jira_unassigned_epic_warning_task,
+        'cron',
+        hour=10,
+        minute=0,
+        id="jira_unassigned_epic_warning",
+        replace_existing=True
+    )
 
     logger.info("APScheduler jobs configured.")
 
