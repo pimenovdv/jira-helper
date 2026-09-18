@@ -5081,3 +5081,30 @@ async def jira_too_many_subtasks_warning_task():
                     f"{marker}"
                 )
                 jira_client.add_comment(issue.key, body)
+
+async def jira_unassigned_epic_warning_task():
+    """
+    Phase 58: Jira Unassigned Epic Warning
+    Finds unresolved Jira Epics that are unassigned and adds a comment suggesting they need an owner.
+    """
+    from app.clients.jira_client import JiraClient
+    jira_client = JiraClient()
+
+    jql = "resolution = Unresolved AND issuetype = Epic"
+    issues = jira_client.search_issues(jql)
+    if not issues:
+        return
+
+    marker = "<!-- AUTO_GENERATED_UNASSIGNED_EPIC_WARNING -->"
+
+    for issue in issues:
+        if getattr(issue.fields, 'assignee', None) is None:
+            comments = jira_client.get_comments(issue.key)
+            if not any(marker in getattr(c, 'body', '') for c in comments):
+                body = (
+                    "It looks like this Epic doesn't have an assignee. "
+                    "Epics generally need an owner to drive their completion. "
+                    "Please consider assigning someone to this Epic.\\n\\n"
+                    f"{marker}"
+                )
+                jira_client.add_comment(issue.key, body)
