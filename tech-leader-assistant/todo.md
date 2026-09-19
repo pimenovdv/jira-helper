@@ -12,9 +12,9 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-57: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, Jira epic completion checker, and Jira too many subtasks warning.
+- [x] Phases 1-58: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, Jira epic completion checker, Jira too many subtasks warning, and Jira unassigned epic warning.
 
-### Phase 58: Jira Unassigned Epic Warning
-- [x] Create `jira_unassigned_epic_warning_task` to identify Jira Epics that are unresolved and unassigned.
-- [x] Add a comment suggesting the Epic needs an owner to drive its completion.
-- [x] Include an auto-generated HTML marker `<!-- AUTO_GENERATED_UNASSIGNED_EPIC_WARNING -->`.
+### Phase 59: GitLab MR Secrets Scanner
+- [x] Create `gitlab_mr_secrets_scanner_task` to identify hardcoded secrets (e.g., passwords, api_keys, tokens) in the added lines of MR diffs.
+- [x] Add a comment to the MR warning about the suspected secret.
+- [x] Include an auto-generated HTML marker `<!-- AUTO_GENERATED_SECRETS_SCANNER_WARNING -->`.
