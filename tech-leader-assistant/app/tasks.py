@@ -5108,3 +5108,61 @@ async def jira_unassigned_epic_warning_task():
                     f"{marker}"
                 )
                 jira_client.add_comment(issue.key, body)
+
+async def gitlab_mr_secrets_scanner_task():
+    """
+    Phase 59: GitLab MR Secrets Scanner
+    Checks open GitLab MRs for hardcoded secrets (e.g., password, api_key, token)
+    in the added lines of their diffs. If found, adds a warning comment.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR secrets scanner task...")
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_SECRETS_SCANNER_WARNING -->"
+    # Basic patterns to detect potential secrets
+    patterns = [r'password\s*=', r'api_key\s*=', r'secret\s*=', r'token\s*=']
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                # Fetch full MR to access changes
+                full_mr = gitlab_client.client.projects.get(project_id).mergerequests.get(mr.iid)
+                changes = full_mr.changes()
+
+                suspected_secrets = []
+                for change in changes.get('changes', []):
+                    diff = change.get('diff', '')
+                    # Only check added lines
+                    added_lines = [line for line in diff.split('\n') if line.startswith('+') and not line.startswith('+++')]
+                    for line in added_lines:
+                        for p in patterns:
+                            if re.search(p, line, re.IGNORECASE):
+                                suspected_secrets.append(f"File `{change.get('new_path')}`: `{line[1:].strip()}`")
+                                break # don't add the same line multiple times
+
+                if suspected_secrets:
+                    # check if already warned
+                    notes = mr.notes.list(all=True)
+                    if not any(marker in getattr(note, 'body', '') for note in notes):
+                        warning_msg = (
+                            "⚠️ **Warning: Potential secrets detected in this Merge Request.**\n\n"
+                            "The following lines appear to contain hardcoded secrets (passwords, API keys, tokens, etc.):\n\n"
+                        )
+                        for secret_line in set(suspected_secrets): # Unique lines
+                            warning_msg += f"- {secret_line}\n"
+
+                        warning_msg += (
+                            "\nPlease review these changes. If they are actual secrets, **do not merge** and ensure they are properly stored (e.g., using environment variables or a secrets manager).\n\n"
+                            f"{marker}"
+                        )
+                        gitlab_client.create_mr_note(project_id, mr.iid, warning_msg)
+                        logger.info(f"Posted secrets scanner warning for project {project_id}, MR !{mr.iid}.")
+        except Exception as e:
+            logger.error(f"Error processing secrets scanner for project {project_id}: {e}")
+
+    return "GitLab MR secrets scanner task completed"
