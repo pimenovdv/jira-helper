@@ -5166,3 +5166,63 @@ async def gitlab_mr_secrets_scanner_task():
             logger.error(f"Error processing secrets scanner for project {project_id}: {e}")
 
     return "GitLab MR secrets scanner task completed"
+
+async def confluence_empty_page_checker_task():
+    """
+    Phase 60: Confluence Empty Page Checker
+    Checks tracked Confluence spaces for pages that are essentially empty
+    (less than 50 characters of text after stripping HTML) and adds a warning comment.
+    """
+    import logging
+    import re
+    from app.clients.confluence_client import ConfluenceClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Confluence empty page checker task...")
+
+    confluence_client = ConfluenceClient()
+    tracked_spaces_str = settings.get("CONFLUENCE_TRACKED_SPACES", "")
+    tracked_spaces = [s.strip() for s in tracked_spaces_str.split(",") if s.strip()]
+    marker = "<!-- AUTO_GENERATED_EMPTY_PAGE_WARNING -->"
+
+    for space in tracked_spaces:
+        try:
+            # handle pagination/dict return format
+            response = confluence_client.client.get_all_pages_from_space(space, expand='body.storage,history.lastUpdated,version', limit=100)
+            pages = response.get('results', response) if isinstance(response, dict) else response
+
+            for page in pages:
+                page_id = page.get('id')
+                body_storage = page.get('body', {}).get('storage', {}).get('value', '')
+
+                # strip HTML to count actual text length
+                text_content = re.sub(r'<[^>]*>', '', body_storage).strip()
+
+                if len(text_content) < 50:
+                    # Check for existing warning comment
+                    comments_response = confluence_client.client.get_page_comments(page_id, expand="body.storage")
+                    comments = comments_response.get("results", comments_response) if isinstance(comments_response, dict) else comments_response
+
+                    if not any(marker in comment.get("body", {}).get("storage", {}).get("value", "") for comment in comments):
+                        last_updated_by = page.get('history', {}).get('lastUpdated', {}).get('by', {})
+                        account_id = last_updated_by.get('accountId', '')
+
+                        mention = f'<ac:link><ri:user ri:userkey="{account_id}"/></ac:link>' if account_id else "Author"
+                        if account_id:
+                            # Atlassian standard mention format for newer APIs sometimes uses accountId directly or [~accountid:...]
+                            # But in storage format, we should use: <ac:link><ri:user ri:account-id="{account_id}"/></ac:link>
+                            mention = f'<ac:link><ri:user ri:account-id="{account_id}"/></ac:link>'
+
+                        comment_body = (
+                            f"<p>⚠️ <strong>Warning: Empty Page Detected</strong></p>"
+                            f"<p>Hello {mention}, this page appears to be almost empty. "
+                            f"Please add some content to it, or consider deleting it if it is no longer needed.</p>"
+                            f"<p>{marker}</p>"
+                        )
+                        confluence_client.client.add_comment(page_id, comment_body)
+                        logger.info(f"Posted empty page warning on page {page_id} in space {space}.")
+        except Exception as e:
+            logger.error(f"Error processing empty page checker for space {space}: {e}")
+
+    return "Confluence empty page checker task completed"
