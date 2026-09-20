@@ -250,6 +250,16 @@ def setup_scheduler():
         replace_existing=True
     )
 
+    from app.tasks import confluence_empty_page_checker_task
+    scheduler.add_job(
+        confluence_empty_page_checker_task,
+        'cron',
+        hour=8,
+        minute=15,
+        id="confluence_empty_page_checker",
+        replace_existing=True
+    )
+
     logger.info("APScheduler jobs configured.")
 
 
