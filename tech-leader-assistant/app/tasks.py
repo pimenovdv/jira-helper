@@ -5226,3 +5226,44 @@ async def confluence_empty_page_checker_task():
             logger.error(f"Error processing empty page checker for space {space}: {e}")
 
     return "Confluence empty page checker task completed"
+
+async def gitlab_mr_too_many_commits_notifier_task():
+    """
+    Phase 61: GitLab MR Too Many Commits Notifier
+    Scans tracked GitLab projects for open MRs with more than 20 commits.
+    Posts a comment advising the author to squash commits to keep history clean.
+    """
+    logger.info("Starting GitLab MR too many commits notifier task...")
+
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "")
+    if not tracked_projects:
+        return "Too many commits notifier task skipped (no projects tracked)"
+
+    projects = [p.strip() for p in tracked_projects.split(",") if p.strip()]
+    marker = "<!-- AUTO_GENERATED_TOO_MANY_COMMITS_WARNING -->"
+    threshold = 20
+
+    for project_id in projects:
+        try:
+            mrs = GitLabClient.get_open_mrs(project_id)
+            for mr in mrs:
+                try:
+                    commits = list(mr.commits())
+                    if len(commits) > threshold:
+                        existing_notes = mr.notes.list(all=True)
+                        already_warned = any(marker in note.body for note in existing_notes)
+
+                        if not already_warned:
+                            warning_msg = (
+                                f"{marker}\n"
+                                f"**Too Many Commits Warning**: This Merge Request currently has {len(commits)} commits. "
+                                "Please consider squashing your commits to keep the Git history clean and easier to review."
+                            )
+                            GitLabClient.create_mr_note(project_id, mr.iid, warning_msg)
+                            logger.info(f"Posted too many commits warning on MR {mr.iid} in project {project_id}")
+                except Exception as e:
+                    logger.error(f"Error checking commits for MR {mr.iid} in project {project_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error fetching MRs for project {project_id} in too many commits notifier: {e}")
+
+    return "GitLab MR too many commits notifier task completed"
