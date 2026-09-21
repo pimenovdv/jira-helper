@@ -12,9 +12,9 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-59: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, Jira epic completion checker, Jira too many subtasks warning, Jira unassigned epic warning, and GitLab MR secrets scanner.
+- [x] Phases 1-60: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, Jira epic completion checker, Jira too many subtasks warning, Jira unassigned epic warning, GitLab MR secrets scanner, and Confluence empty page checker.
 
-### Phase 60: Confluence Empty Page Checker
-- [x] Create `confluence_empty_page_checker_task` to scan Confluence spaces for pages that are essentially empty (less than 50 characters of text after stripping HTML).
-- [x] Add a warning comment to the page tagging the last author and advising them to add content or delete the page.
-- [x] Include an auto-generated HTML marker `<!-- AUTO_GENERATED_EMPTY_PAGE_WARNING -->` to avoid duplicates.
+### Phase 61: GitLab MR Too Many Commits Notifier
+- [x] Create `gitlab_mr_too_many_commits_notifier_task` to scan open MRs in GitLab.
+- [x] If an MR has more than 20 commits, post a comment recommending the author to squash commits to keep the git history clean.
+- [x] Include an HTML marker `<!-- AUTO_GENERATED_TOO_MANY_COMMITS_WARNING -->` to avoid duplicate comments.

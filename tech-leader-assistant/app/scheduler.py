@@ -260,6 +260,16 @@ def setup_scheduler():
         replace_existing=True
     )
 
+    from app.tasks import gitlab_mr_too_many_commits_notifier_task
+    scheduler.add_job(
+        gitlab_mr_too_many_commits_notifier_task,
+        'cron',
+        hour='*/4',
+        minute=30,
+        id="gitlab_mr_too_many_commits_notifier",
+        replace_existing=True
+    )
+
     logger.info("APScheduler jobs configured.")
 
 
