@@ -5267,3 +5267,46 @@ async def gitlab_mr_too_many_commits_notifier_task():
             logger.error(f"Error fetching MRs for project {project_id} in too many commits notifier: {e}")
 
     return "GitLab MR too many commits notifier task completed"
+
+async def jira_bug_missing_attachment_warning_task():
+    """
+    Phase 62: Jira Bug Missing Attachment Warning
+    Finds unresolved Jira Bugs and checks if they have any attachments.
+    If not, posts a comment advising the reporter/assignee to attach screenshots, logs, etc.
+    """
+    from app.clients.jira_client import JiraClient
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Jira Bug Missing Attachment Warning task...")
+
+    jira_client = JiraClient()
+    jql = "issuetype = Bug AND resolution = Unresolved"
+    issues = jira_client.search_issues(jql)
+    if not issues:
+        return "No unresolved bugs found"
+
+    marker = "<!-- AUTO_GENERATED_MISSING_ATTACHMENT_WARNING -->"
+    warned_count = 0
+
+    for issue in issues:
+        try:
+            # Check if there are no attachments
+            attachments = getattr(issue.fields, 'attachment', [])
+            if not attachments:
+                # Check if we already warned
+                comments = jira_client.get_comments(issue.key)
+                if not any(marker in getattr(c, 'body', '') for c in comments):
+                    body = (
+                        "⚠️ **Missing Attachments Warning**\n\n"
+                        "This bug report does not have any attachments. "
+                        "Please consider attaching screenshots, logs, or other relevant files to help the team reproduce and fix the issue faster.\n\n"
+                        f"{marker}"
+                    )
+                    jira_client.add_comment(issue.key, body)
+                    logger.info(f"Posted missing attachment warning for bug {issue.key}")
+                    warned_count += 1
+        except Exception as e:
+            logger.error(f"Error checking attachments for {issue.key}: {e}")
+
+    return f"Jira bug missing attachment task completed, warned {warned_count} bugs"
