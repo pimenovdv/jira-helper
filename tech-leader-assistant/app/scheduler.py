@@ -260,6 +260,24 @@ def setup_scheduler():
         replace_existing=True
     )
 
+    from app.tasks import jira_bug_missing_attachment_warning_task
+
+    scheduler.add_job(
+
+        jira_bug_missing_attachment_warning_task,
+
+        "cron",
+
+        hour=13,
+
+        minute=15,
+
+        id="jira_bug_missing_attachment_warning",
+
+        replace_existing=True
+
+    )
+
     from app.tasks import gitlab_mr_too_many_commits_notifier_task
     scheduler.add_job(
         gitlab_mr_too_many_commits_notifier_task,
