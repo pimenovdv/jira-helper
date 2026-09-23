@@ -5310,3 +5310,47 @@ async def jira_bug_missing_attachment_warning_task():
             logger.error(f"Error checking attachments for {issue.key}: {e}")
 
     return f"Jira bug missing attachment task completed, warned {warned_count} bugs"
+
+async def jira_stale_active_sprint_issue_warning_task():
+    """
+    Phase 63: Jira Stale Active Sprint Issue Warning
+    Finds unresolved issues in active sprints that haven't had updates recently (e.g., in the last 2 days).
+    If found, pings the assignee to provide an update or review the status.
+    """
+    from app.clients.jira_client import JiraClient
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Jira Stale Active Sprint Issue Warning task...")
+
+    jira_client = JiraClient()
+    jql = "sprint in openSprints() AND resolution = Unresolved AND updated <= -2d"
+    issues = jira_client.search_issues(jql)
+
+    if not issues:
+        return "No stale active sprint issues found"
+
+    marker = "<!-- AUTO_GENERATED_STALE_ACTIVE_SPRINT_WARNING -->"
+    warned_count = 0
+
+    for issue in issues:
+        try:
+            # Check if we already warned
+            comments = jira_client.get_comments(issue.key)
+            if not any(marker in getattr(c, 'body', '') for c in comments):
+                assignee = getattr(issue.fields, 'assignee', None)
+                assignee_mention = f"[~accountid:{assignee.accountId}]" if assignee and getattr(assignee, 'accountId', None) else "Assignee"
+
+                body = (
+                    f"⚠️ **Stale Active Sprint Issue**\n\n"
+                    f"Hello {assignee_mention}, this issue is in an active sprint but hasn't been updated in over 2 days. "
+                    f"Please provide an update on the progress or review its status.\n\n"
+                    f"{marker}"
+                )
+                jira_client.add_comment(issue.key, body)
+                logger.info(f"Posted stale active sprint issue warning for {issue.key}")
+                warned_count += 1
+        except Exception as e:
+            logger.error(f"Error checking stale active sprint issue for {issue.key}: {e}")
+
+    return f"Jira stale active sprint issue warning task completed: warned {warned_count} issues."
