@@ -13,6 +13,7 @@ from .tasks import (
     opensearch_stale_document_expiration_task,
     confluence_auto_link_task,
     confluence_missing_page_tag_reminder_task,
+    gitlab_mr_missing_approvals_reminder_task,
     neo4j_ghost_node_cleanup_task,
     generate_release_notes_task,
     stale_mr_reminder_task,
@@ -297,6 +298,14 @@ def setup_scheduler():
         minute=30,
         id="gitlab_mr_too_many_commits_notifier",
         replace_existing=True
+    )
+
+    scheduler.add_job(
+        gitlab_mr_missing_approvals_reminder_task,
+        "cron",
+        hour=9,
+        minute=0,
+        id="gitlab_mr_missing_approvals_reminder",
     )
 
     logger.info("APScheduler jobs configured.")
