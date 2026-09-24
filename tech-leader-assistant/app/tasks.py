@@ -7,7 +7,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.vectorstores import OpenSearchVectorSearch
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select
 from app.clients.gitlab_client import GitLabClient
 from app.clients.jira_client import JiraClient
@@ -5354,3 +5354,60 @@ async def jira_stale_active_sprint_issue_warning_task():
             logger.error(f"Error checking stale active sprint issue for {issue.key}: {e}")
 
     return f"Jira stale active sprint issue warning task completed: warned {warned_count} issues."
+
+async def gitlab_mr_missing_approvals_reminder_task():
+    """
+    Checks open MRs and reminds reviewers if approvals are missing.
+    """
+    try:
+        projects_str = settings.get("GITLAB_TRACKED_PROJECTS", "")
+        if not projects_str:
+            return
+
+        tracked_projects = [p.strip() for p in projects_str.split(",") if p.strip()]
+        days_threshold = int(settings.get("GITLAB_MR_MISSING_APPROVALS_DAYS", 3))
+
+        client = GitLabClient()
+        now = datetime.now(timezone.utc)
+
+        for project_id in tracked_projects:
+            mrs = client.get_project_merge_requests(project_id, state='opened')
+            for mr_data in mrs:
+                try:
+                    created_at_str = mr_data.created_at
+                    if created_at_str.endswith("Z"):
+                        created_at_str = created_at_str[:-1] + "+00:00"
+                    mr_created_at = datetime.fromisoformat(created_at_str)
+                    days_open = (now - mr_created_at).days
+
+                    if days_open >= days_threshold:
+                        # fetch actual mr object from client for approvals
+                        mr = client.client.projects.get(project_id).mergerequests.get(mr_data.iid)
+
+                        approvals = mr.approvals.get()
+                        approvals_left = getattr(approvals, 'approvals_left', 0)
+
+                        if approvals_left > 0:
+                            # Check if comment already exists
+                            notes = mr.notes.list(all=True)
+                            already_reminded = any("<!-- AUTO_GENERATED_MISSING_APPROVALS_REMINDER -->" in n.body for n in notes)
+
+                            if not already_reminded:
+                                reviewers = mr.attributes.get('reviewers', [])
+                                mention_str = ""
+                                if reviewers:
+                                    mentions = [f"@{r['username']}" for r in reviewers]
+                                    mention_str = " " + " ".join(mentions) + " -"
+
+                                comment_body = (
+                                    f"⚠️ Reminder:{mention_str} This merge request has been open for {days_open} days "
+                                    f"and still requires {approvals_left} more approval(s).\n\n"
+                                    "<!-- AUTO_GENERATED_MISSING_APPROVALS_REMINDER -->"
+                                )
+                                client.create_mr_note(project_id, mr.iid, comment_body)
+                                logging.info(f"Posted missing approvals reminder for MR !{mr.iid} in project {project_id}")
+                except Exception as e:
+                    logging.error(f"Error processing MR {mr_data.iid} in project {project_id} for missing approvals: {e}")
+
+    except Exception as e:
+        logging.error(f"Error in gitlab_mr_missing_approvals_reminder_task: {e}")
