@@ -14,6 +14,7 @@ from .tasks import (
     confluence_auto_link_task,
     confluence_missing_page_tag_reminder_task,
     gitlab_mr_missing_approvals_reminder_task,
+    jira_stale_backlog_task_reminder_task,
     neo4j_ghost_node_cleanup_task,
     generate_release_notes_task,
     stale_mr_reminder_task,
@@ -306,6 +307,15 @@ def setup_scheduler():
         hour=9,
         minute=0,
         id="gitlab_mr_missing_approvals_reminder",
+    )
+
+    scheduler.add_job(
+        jira_stale_backlog_task_reminder_task,
+        "cron",
+        hour=9,
+        minute=0,
+        day_of_week="mon",
+        id="jira_stale_backlog_task_reminder",
     )
 
     logger.info("APScheduler jobs configured.")

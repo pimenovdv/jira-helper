@@ -5411,3 +5411,51 @@ async def gitlab_mr_missing_approvals_reminder_task():
 
     except Exception as e:
         logging.error(f"Error in gitlab_mr_missing_approvals_reminder_task: {e}")
+
+async def jira_stale_backlog_task_reminder_task():
+    """
+    Checks issues in 'Backlog' or 'To Do' state that have been untouched for more than 90 days.
+    Posts a comment suggesting to refine, prioritize, or close the issue.
+    """
+    try:
+        from app.clients.jira_client import JiraClient
+        from datetime import datetime, timezone
+        import dateutil.parser
+
+        days_threshold = int(settings.get("JIRA_STALE_BACKLOG_DAYS", 90))
+        jql = f'status IN ("Backlog", "To Do") AND updated <= -{days_threshold}d'
+
+        jira_client = JiraClient()
+        issues = jira_client.search_issues(jql)
+
+        warned_count = 0
+        now = datetime.now(timezone.utc)
+
+        for issue in issues:
+            try:
+                comments = jira_client.get_issue_comments(issue.key)
+                already_reminded = any(
+                    "<!-- AUTO_GENERATED_STALE_BACKLOG_REMINDER -->" in getattr(c, "body", "")
+                    for c in comments
+                )
+
+                if not already_reminded:
+                    updated_str = issue.fields.updated
+                    updated_at = dateutil.parser.isoparse(updated_str)
+                    days_inactive = (now - updated_at).days
+
+                    body = (
+                        f"⚠️ This issue has been in the backlog/to do list and inactive for {days_inactive} days. "
+                        "Please consider refining it, prioritizing it for an upcoming sprint, or closing it if it is no longer relevant.\n\n"
+                        "<!-- AUTO_GENERATED_STALE_BACKLOG_REMINDER -->"
+                    )
+                    jira_client.add_comment(issue.key, body)
+                    logger.info(f"Posted stale backlog warning for {issue.key}")
+                    warned_count += 1
+            except Exception as e:
+                logger.error(f"Error checking stale backlog for {issue.key}: {e}")
+
+        return f"Jira stale backlog reminder task completed: warned {warned_count} issues."
+    except Exception as e:
+        logger.error(f"Error in jira_stale_backlog_task_reminder_task: {e}")
+        return f"Error: {e}"
