@@ -20,5 +20,5 @@
 - [x] Add an HTML marker `<!-- AUTO_GENERATED_STALE_BACKLOG_REMINDER -->` to avoid duplicate comments.
 
 ### Phase 66: GitLab MR Missing Changelog Label Checker
-- [ ] Create `gitlab_mr_missing_changelog_label_checker_task` to check if an MR is missing a changelog-related label if the project enforces one.
-- [ ] If the label is missing, add a comment indicating it should be added.
+- [x] Create `gitlab_mr_missing_changelog_label_checker_task` to check if an MR is missing a changelog-related label if the project enforces one.
+- [x] If the label is missing, add a comment indicating it should be added.
