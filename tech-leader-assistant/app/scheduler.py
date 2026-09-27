@@ -318,6 +318,16 @@ def setup_scheduler():
         id="jira_stale_backlog_task_reminder",
     )
 
+    from app.tasks import gitlab_mr_missing_changelog_label_checker_task
+    scheduler.add_job(
+        gitlab_mr_missing_changelog_label_checker_task,
+        "cron",
+        hour=11,
+        minute=30,
+        id="gitlab_mr_missing_changelog_label_checker",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
 
 

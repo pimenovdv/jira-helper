@@ -5459,3 +5459,65 @@ async def jira_stale_backlog_task_reminder_task():
     except Exception as e:
         logger.error(f"Error in jira_stale_backlog_task_reminder_task: {e}")
         return f"Error: {e}"
+
+async def gitlab_mr_missing_changelog_label_checker_task():
+    """
+    Checks tracked GitLab projects for open Merge Requests.
+    If a project enforces changelog labels and an MR is missing one,
+    generates an automated message asking the author to add it.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+    from langchain_openai import ChatOpenAI
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting GitLab MR missing changelog label checker task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR missing changelog label checker.")
+        return "GitLab MR missing changelog label checker task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_GITLAB_MISSING_CHANGELOG_LABEL_REMINDER -->"
+
+    for project_id in tracked_projects:
+        try:
+            project = gitlab_client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state="opened", all=True)
+
+            for mr in mrs:
+                try:
+                    labels = [str(lbl).lower() for lbl in getattr(mr, "labels", [])]
+                    has_changelog_label = any("changelog" in lbl for lbl in labels)
+
+                    if not has_changelog_label:
+                        notes = mr.notes.list(all=True)
+                        already_notified = any(reminder_marker in note.body for note in notes)
+
+                        if not already_notified:
+                            author_username = mr.author.get("username", "author") if hasattr(mr, "author") and isinstance(mr.author, dict) else "author"
+                            author_mention = f"@{author_username}"
+
+                            prompt = (
+                                f"Напиши короткое и вежливое напоминание разработчику {author_mention} о том, что "
+                                "в этом Merge Request отсутствует метка (label), связанная с changelog. "
+                                "Попроси добавить соответствующую метку (например, 'changelog:added' или 'changelog:skip'). "
+                                "Сообщение должно быть на русском языке."
+                            )
+
+                            resp = await llm.ainvoke([HumanMessage(content=prompt)])
+                            comment_body = resp.content.strip() + f"\n\n{reminder_marker}"
+
+                            gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+                            logger.info(f"Added missing changelog label reminder to MR {mr.iid} in project {project_id}")
+                except Exception as mr_e:
+                    logger.error(f"Error processing MR {mr.iid} for missing changelog label: {mr_e}")
+        except Exception as p_e:
+            logger.error(f"Error processing project {project_id} for missing changelog label: {p_e}")
+
+    return "GitLab MR missing changelog label checker task completed."
