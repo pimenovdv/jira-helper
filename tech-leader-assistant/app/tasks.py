@@ -5578,3 +5578,78 @@ async def jira_unestimated_bug_warning_task():
                 logger.error(f"Error checking unestimated bug {issue.key}: {e}")
 
     return f"Jira unestimated bug warning task completed: warned {warned_count} issues."
+async def gitlab_mr_stale_needs_work_reminder_task():
+    """
+    Checks open MRs in tracked GitLab projects.
+    If an MR has a 'needs work' or 'changes requested' label and hasn't had recent commits (> 3 days),
+    it leaves an automated comment reminding the author to address the feedback.
+    """
+    import logging
+    from datetime import datetime, timezone, timedelta
+    import dateutil.parser
+    from langchain_core.messages import HumanMessage
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+    from langchain_openai import ChatOpenAI
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab stale needs work reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.error("OPENAI_API_KEY is not set.")
+        return "GitLab stale needs work reminder task failed: OPENAI_API_KEY missing."
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_GITLAB_STALE_NEEDS_WORK_REMINDER -->"
+    now = datetime.now(timezone.utc)
+
+    for project_id in tracked_projects:
+        try:
+            project = gitlab_client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state="opened", all=True)
+
+            for mr in mrs:
+                try:
+                    labels = [str(lbl).lower() for lbl in getattr(mr, "labels", [])]
+                    has_needs_work_label = any("needs work" in lbl or "changes requested" in lbl for lbl in labels)
+
+                    if has_needs_work_label:
+                        commits = list(mr.commits())
+                        if not commits:
+                            continue
+
+                        latest_commit = commits[0]
+                        commit_date = dateutil.parser.isoparse(latest_commit.created_at)
+
+                        if (now - commit_date) > timedelta(days=3):
+                            notes = mr.notes.list(all=True)
+                            already_notified = any(reminder_marker in note.body for note in notes)
+
+                            if not already_notified:
+                                author_username = mr.author.get("username", "author") if hasattr(mr, "author") and isinstance(mr.author, dict) else "author"
+                                author_mention = f"@{author_username}"
+
+                                prompt = (
+                                    f"Напиши короткое и вежливое напоминание разработчику {author_mention} о том, что "
+                                    "этот Merge Request имеет метку, требующую внесения изменений (например, 'needs work'), "
+                                    "но новых коммитов не было уже несколько дней. "
+                                    "Попроси его обратить внимание и внести необходимые правки. "
+                                    "Сообщение должно быть на русском языке."
+                                )
+
+                                resp = await llm.ainvoke([HumanMessage(content=prompt)])
+                                comment_body = resp.content.strip() + f"\n\n{reminder_marker}"
+
+                                gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+                                logger.info(f"Added stale needs work reminder to MR {mr.iid} in project {project_id}")
+                except Exception as mr_e:
+                    logger.error(f"Error processing MR {mr.iid} for stale needs work reminder: {mr_e}")
+        except Exception as p_e:
+            logger.error(f"Error processing project {project_id} for stale needs work reminder: {p_e}")
+
+    return "GitLab MR stale needs work reminder task completed."

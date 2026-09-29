@@ -20,5 +20,5 @@
 - [x] Post a comment warning that it should be estimated to track capacity accurately.
 
 ### Phase 68: GitLab MR Stale Needs Work Reminder
-- [ ] Create `gitlab_mr_stale_needs_work_reminder_task` to check open MRs that have a 'needs work' or 'changes requested' label but no recent commits.
-- [ ] Post a comment reminding the author to address the feedback.
+- [x] Create `gitlab_mr_stale_needs_work_reminder_task` to check open MRs that have a 'needs work' or 'changes requested' label but no recent commits.
+- [x] Post a comment reminding the author to address the feedback.

@@ -329,6 +329,7 @@ def setup_scheduler():
     )
 
     from app.tasks import jira_unestimated_bug_warning_task
+    from app.tasks import gitlab_mr_stale_needs_work_reminder_task
     scheduler.add_job(
         jira_unestimated_bug_warning_task,
         "cron",
@@ -336,6 +337,10 @@ def setup_scheduler():
         minute=15,
         id="jira_unestimated_bug_warning",
         replace_existing=True,
+    )
+    scheduler.add_job(
+        gitlab_mr_stale_needs_work_reminder_task,
+        'cron', hour=14, minute=30, id="gitlab_mr_stale_needs_work_reminder", replace_existing=True
     )
 
     logger.info("APScheduler jobs configured.")
