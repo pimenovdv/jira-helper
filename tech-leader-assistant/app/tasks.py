@@ -5653,3 +5653,68 @@ async def gitlab_mr_stale_needs_work_reminder_task():
             logger.error(f"Error processing project {project_id} for stale needs work reminder: {p_e}")
 
     return "GitLab MR stale needs work reminder task completed."
+
+
+async def gitlab_mr_approved_but_unmerged_reminder_task():
+    """
+    Checks open MRs in tracked GitLab projects. If an MR is fully approved,
+    has no merge conflicts, and hasn't been updated for 3 days, it posts a reminder.
+    """
+    from langchain_core.messages import HumanMessage
+    from langchain_openai import ChatOpenAI
+    from app.clients.gitlab_client import GitLabClient
+    import dateutil.parser
+    from datetime import datetime, timedelta, timezone
+    logger.info("Starting gitlab_mr_approved_but_unmerged_reminder_task...")
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "")
+
+    openai_api_key = settings.get("OPENAI_API_KEY")
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    if isinstance(tracked_projects, str):
+        tracked_projects = tracked_projects.split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_GITLAB_APPROVED_UNMERGED_REMINDER -->"
+    now = datetime.now(timezone.utc)
+
+    for project_id in tracked_projects:
+        try:
+            project = gitlab_client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state="opened", all=True)
+
+            for mr in mrs:
+                try:
+                    approvals = mr.approvals.get()
+                    if approvals.approvals_left == 0 and not mr.has_conflicts:
+                        mr_updated_at = dateutil.parser.isoparse(mr.updated_at)
+                        if mr_updated_at.tzinfo is None:
+                            mr_updated_at = mr_updated_at.replace(tzinfo=timezone.utc)
+
+                        if (now - mr_updated_at) > timedelta(days=3):
+                            notes = mr.notes.list(all=True)
+                            already_notified = any(reminder_marker in note.body for note in notes)
+
+                            if not already_notified:
+                                author_username = mr.author.get("username", "author") if hasattr(mr, "author") and isinstance(mr.author, dict) else "author"
+                                author_mention = f"@{author_username}"
+
+                                prompt = (
+                                    f"Напиши короткое и вежливое напоминание разработчику {author_mention} о том, что "
+                                    "этот Merge Request уже получил все необходимые аппрувы и не имеет конфликтов слияния, "
+                                    "но почему-то до сих пор не влит (прошло уже больше 3 дней). "
+                                    "Попроси его влить MR или уточнить, если есть какие-то блокеры. "
+                                    "Сообщение должно быть на русском языке."
+                                )
+
+                                resp = await llm.ainvoke([HumanMessage(content=prompt)])
+                                comment_body = resp.content.strip() + f"\n\n{reminder_marker}"
+
+                                gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+                                logger.info(f"Added approved but unmerged reminder to MR {mr.iid} in project {project_id}")
+                except Exception as mr_e:
+                    logger.error(f"Error processing MR {mr.iid} for approved but unmerged reminder: {mr_e}")
+        except Exception as p_e:
+            logger.error(f"Error processing project {project_id} for approved but unmerged reminder: {p_e}")
+
+    return "GitLab MR approved but unmerged reminder task completed."
