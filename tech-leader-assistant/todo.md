@@ -20,5 +20,5 @@
 - [x] Post a comment reminding the author to merge the MR.
 
 ### Phase 70: Jira Stale Assigned Task Warning
-- [ ] Create `jira_stale_assigned_task_warning_task` to check assigned tasks that haven't been transitioned or commented on for more than 7 days.
-- [ ] Post a comment asking the assignee for a status update.
+- [x] Create `jira_stale_assigned_task_warning_task` to check assigned tasks that haven't been transitioned or commented on for more than 7 days.
+- [x] Post a comment asking the assignee for a status update.
