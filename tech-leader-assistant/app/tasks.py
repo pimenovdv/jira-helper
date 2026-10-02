@@ -5718,3 +5718,61 @@ async def gitlab_mr_approved_but_unmerged_reminder_task():
             logger.error(f"Error processing project {project_id} for approved but unmerged reminder: {p_e}")
 
     return "GitLab MR approved but unmerged reminder task completed."
+
+async def jira_stale_assigned_task_warning_task():
+    """
+    Checks assigned tasks that haven't been transitioned or commented on for more than 7 days.
+    Posts a comment asking the assignee for a status update.
+    """
+    logger.info("Starting automated Jira stale assigned task warning task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira stale assigned task warning task.")
+        return "Jira stale assigned task warning task skipped (no OpenAI API key)"
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_STALE_ASSIGNED_TASK_WARNING -->"
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+
+    for j_proj in tracked_projects:
+        jql = f'project = "{j_proj}" AND assignee IS NOT EMPTY AND statusCategory != Done AND updated <= -7d'
+        try:
+            issues = jira_client.search_issues(jql)
+            if not issues:
+                continue
+
+            for issue in issues:
+                try:
+                    comments = jira_client.get_comments(issue.key)
+                    already_reminded = any(
+                        reminder_marker in (c.body or "") for c in comments
+                    )
+                    if already_reminded:
+                        logger.info(f"Already sent stale assigned task warning for Jira task {issue.key}.")
+                        continue
+
+                    assignee_name = issue.fields.assignee.displayName if hasattr(issue.fields, "assignee") and issue.fields.assignee else "Команда"
+
+                    prompt = (
+                        f"Ты ассистент технического лидера, который помогает следить за процессом разработки. "
+                        f"Напиши короткое, вежливое сообщение исполнителю ({assignee_name}) задачи Jira ({issue.key}), "
+                        f"в которой не было никаких обновлений (переходов статуса или комментариев) более 7 дней. "
+                        f"Спроси, нужна ли какая-то помощь, есть ли блокеры, и попроси обновить статус задачи, если она уже выполнена. "
+                        f"В конце добавь скрытый маркер: {reminder_marker}"
+                    )
+
+                    response = await llm.ainvoke([HumanMessage(content=prompt)])
+                    comment_body = response.content.strip()
+
+                    jira_client.add_comment(issue.key, comment_body)
+                    logger.info(f"Added stale assigned task warning to Jira task {issue.key}")
+                except Exception as e:
+                    logger.error(f"Error processing issue {issue.key}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing project {j_proj} in Jira stale assigned task warning task: {e}")
+
+    return "Jira stale assigned task warning task completed"
