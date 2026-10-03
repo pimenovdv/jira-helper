@@ -12,13 +12,9 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-68: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, Jira epic completion checker, Jira too many subtasks warning, Jira unassigned epic warning, GitLab MR secrets scanner, Confluence empty page checker, GitLab MR Too Many Commits Notifier, Jira Bug Missing Attachment Warning, Jira Stale Active Sprint Issue Warning, GitLab MR Missing Approvals Reminder, Jira Stale Backlog Task Reminder, GitLab MR Missing Changelog Label Checker, Jira Unestimated Bug Warning, and GitLab MR Stale Needs Work Reminder.
+- [x] Phases 1-70: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, Jira epic completion checker, Jira too many subtasks warning, Jira unassigned epic warning, GitLab MR secrets scanner, Confluence empty page checker, GitLab MR Too Many Commits Notifier, Jira Bug Missing Attachment Warning, Jira Stale Active Sprint Issue Warning, GitLab MR Missing Approvals Reminder, Jira Stale Backlog Task Reminder, GitLab MR Missing Changelog Label Checker, Jira Unestimated Bug Warning, GitLab MR Stale Needs Work Reminder, GitLab MR Approved But Unmerged Reminder, and Jira Stale Assigned Task Warning.
 
 
-### Phase 69: GitLab MR Approved But Unmerged Reminder
-- [x] Create `gitlab_mr_approved_but_unmerged_reminder_task` to check open MRs that are fully approved, have no merge conflicts, but haven't been merged after 3 days.
-- [x] Post a comment reminding the author to merge the MR.
-
-### Phase 70: Jira Stale Assigned Task Warning
-- [x] Create `jira_stale_assigned_task_warning_task` to check assigned tasks that haven't been transitioned or commented on for more than 7 days.
-- [x] Post a comment asking the assignee for a status update.
+### Phase 71: Jira Unassigned In Progress Warning
+- [x] Create `jira_unassigned_in_progress_warning_task` to check issues in "In Progress" status that have no assignee.
+- [x] Post a comment asking to assign the issue to accurately track progress.

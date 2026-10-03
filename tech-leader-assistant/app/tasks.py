@@ -5776,3 +5776,40 @@ async def jira_stale_assigned_task_warning_task():
             logger.error(f"Error processing project {j_proj} in Jira stale assigned task warning task: {e}")
 
     return "Jira stale assigned task warning task completed"
+
+
+async def jira_unassigned_in_progress_warning_task():
+    """
+    Finds issues in Jira that are in 'In Progress' status but have no assignee.
+    Adds a reminder comment to assign them accurately track progress.
+    """
+    logger.info("Running Jira unassigned in progress warning task.")
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_UNASSIGNED_IN_PROGRESS_WARNING -->"
+
+    for project_key in jira_projects:
+        project_key = project_key.strip()
+        if not project_key:
+            continue
+
+        jql = f'project = {project_key} AND statusCategory = "In Progress"'
+        issues = jira_client.search_issues(jql)
+
+        for issue in issues:
+            if getattr(issue.fields, 'assignee', None) is not None:
+                continue
+
+            comments = jira_client.get_issue_comments(issue.key)
+            if any(marker in getattr(c, 'body', '') for c in comments):
+                continue
+
+            comment_body = (
+                f"{marker}\n"
+                "Hello team,\n\n"
+                "This issue is currently in 'In Progress' status but is unassigned. "
+                "Please assign it to the appropriate team member to accurately track progress."
+            )
+            jira_client.add_comment(issue.key, comment_body)
+            logger.info(f"Added unassigned in progress warning to Jira issue {issue.key}.")

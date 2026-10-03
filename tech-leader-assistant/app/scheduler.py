@@ -332,6 +332,7 @@ def setup_scheduler():
     from app.tasks import gitlab_mr_stale_needs_work_reminder_task
     from app.tasks import gitlab_mr_approved_but_unmerged_reminder_task
     from app.tasks import jira_stale_assigned_task_warning_task
+    from app.tasks import jira_unassigned_in_progress_warning_task
     scheduler.add_job(
         jira_unestimated_bug_warning_task,
         "cron",
@@ -359,6 +360,14 @@ def setup_scheduler():
         hour=10,
         minute=0,
         id="jira_stale_assigned_task_warning",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        jira_unassigned_in_progress_warning_task,
+        "cron",
+        hour=11,
+        minute=0,
+        id="jira_unassigned_in_progress_warning",
         replace_existing=True,
     )
 
