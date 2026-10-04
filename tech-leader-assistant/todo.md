@@ -12,9 +12,8 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-70: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, Confluence stale documentation archiver, Jira unassigned bug reminder, GitLab MR missing description reminder, Jira epic completion checker, Jira too many subtasks warning, Jira unassigned epic warning, GitLab MR secrets scanner, Confluence empty page checker, GitLab MR Too Many Commits Notifier, Jira Bug Missing Attachment Warning, Jira Stale Active Sprint Issue Warning, GitLab MR Missing Approvals Reminder, Jira Stale Backlog Task Reminder, GitLab MR Missing Changelog Label Checker, Jira Unestimated Bug Warning, GitLab MR Stale Needs Work Reminder, GitLab MR Approved But Unmerged Reminder, and Jira Stale Assigned Task Warning.
+- [x] Phases 1-71: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, and various warning tasks for missing attachments, unassigned/stale tasks, missing PR descriptions/approvals, and unestimated bugs.
 
-
-### Phase 71: Jira Unassigned In Progress Warning
-- [x] Create `jira_unassigned_in_progress_warning_task` to check issues in "In Progress" status that have no assignee.
-- [x] Post a comment asking to assign the issue to accurately track progress.
+### Phase 72: GitLab MR Missing Reviewers Notifier
+- [x] Create `gitlab_mr_missing_reviewers_notifier_task` to check open MRs that do not have reviewers assigned.
+- [x] Post a comment asking the author to add reviewers to the MR to proceed with code review.

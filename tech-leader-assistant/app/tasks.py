@@ -5813,3 +5813,43 @@ async def jira_unassigned_in_progress_warning_task():
             )
             jira_client.add_comment(issue.key, comment_body)
             logger.info(f"Added unassigned in progress warning to Jira issue {issue.key}.")
+
+async def gitlab_mr_missing_reviewers_notifier_task():
+    """
+    Phase 72: Checks tracked GitLab projects for open MRs that do not have any reviewers assigned.
+    If no reviewers are assigned, leaves a reminder comment.
+    """
+    logger.info("Running GitLab MR missing reviewers notifier task.")
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_MISSING_REVIEWERS_WARNING -->"
+
+    for gl_proj in tracked_projects:
+        try:
+            mrs = gitlab_client.get_merge_requests(gl_proj, state="opened")
+            for mr in mrs:
+                if mr.reviewers:
+                    continue
+
+                notes = mr.notes.list(all=True)
+                if any(marker in (note.body or "") for note in notes):
+                    continue
+
+                author_username = mr.author.get('username') if mr.author else "Team"
+                comment_body = (
+                    f"{marker}\n"
+                    f"Hello @{author_username},\n\n"
+                    "This Merge Request currently has no reviewers assigned. "
+                    "Please assign reviewers so that the code review process can begin."
+                )
+
+                gitlab_client.create_mr_note(gl_proj, mr.iid, comment_body)
+                logger.info(f"Added missing reviewers reminder to MR {mr.iid} in project {gl_proj}.")
+
+        except Exception as e:
+            logger.error(f"Error processing missing reviewers notifier for project {gl_proj}: {e}")
+
+    return "GitLab MR missing reviewers notifier task completed."
