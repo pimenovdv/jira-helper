@@ -333,6 +333,15 @@ def setup_scheduler():
     from app.tasks import gitlab_mr_approved_but_unmerged_reminder_task
     from app.tasks import jira_stale_assigned_task_warning_task
     from app.tasks import jira_unassigned_in_progress_warning_task
+    from app.tasks import gitlab_mr_missing_reviewers_notifier_task
+    scheduler.add_job(
+        gitlab_mr_missing_reviewers_notifier_task,
+        "cron",
+        hour=10,
+        minute=45,
+        id="gitlab_mr_missing_reviewers_notifier",
+        replace_existing=True,
+    )
     scheduler.add_job(
         jira_unestimated_bug_warning_task,
         "cron",
