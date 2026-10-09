@@ -334,12 +334,20 @@ def setup_scheduler():
     from app.tasks import jira_stale_assigned_task_warning_task
     from app.tasks import jira_unassigned_in_progress_warning_task
     from app.tasks import gitlab_mr_missing_reviewers_notifier_task
+    from app.tasks import gitlab_mr_too_short_description_notifier_task
     scheduler.add_job(
         gitlab_mr_missing_reviewers_notifier_task,
         "cron",
         hour=10,
         minute=45,
         id="gitlab_mr_missing_reviewers_notifier",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        gitlab_mr_too_short_description_notifier_task,
+        "interval",
+        minutes=60,
+        id="gitlab_mr_too_short_description_notifier",
         replace_existing=True,
     )
     scheduler.add_job(
