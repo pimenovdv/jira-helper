@@ -12,8 +12,8 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-71: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, and various warning tasks for missing attachments, unassigned/stale tasks, missing PR descriptions/approvals, and unestimated bugs.
+- [x] Phases 1-72: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, and various warning tasks for missing attachments, unassigned/stale tasks, missing PR descriptions/approvals, unestimated bugs, and missing MR reviewers.
 
-### Phase 72: GitLab MR Missing Reviewers Notifier
-- [x] Create `gitlab_mr_missing_reviewers_notifier_task` to check open MRs that do not have reviewers assigned.
-- [x] Post a comment asking the author to add reviewers to the MR to proceed with code review.
+### Phase 73: GitLab MR Too Short Description Notifier
+- [x] Create `gitlab_mr_too_short_description_notifier_task` to check open MRs that have descriptions shorter than 30 characters or missing entirely.
+- [x] Post a comment asking the author to provide a more detailed description.

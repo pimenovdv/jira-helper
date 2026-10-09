@@ -5853,3 +5853,49 @@ async def gitlab_mr_missing_reviewers_notifier_task():
             logger.error(f"Error processing missing reviewers notifier for project {gl_proj}: {e}")
 
     return "GitLab MR missing reviewers notifier task completed."
+
+async def gitlab_mr_too_short_description_notifier_task():
+    """
+    Phase 73: Checks tracked GitLab projects for open MRs that have descriptions
+    shorter than 30 characters or missing entirely. If found, leaves a reminder comment.
+    """
+    logger.info("Running GitLab MR too short description notifier task.")
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_TOO_SHORT_DESCRIPTION_WARNING -->"
+    min_length = 30
+
+    for gl_proj in tracked_projects:
+        try:
+            mrs = gitlab_client.get_merge_requests(gl_proj, state="opened")
+            for mr in mrs:
+                description = getattr(mr, "description", "") or ""
+                if len(description) >= min_length:
+                    continue
+
+                notes = mr.notes.list(all=True)
+                if any(marker in (note.body or "") for note in notes):
+                    continue
+
+                author_username = mr.author.get('username') if hasattr(mr, 'author') and isinstance(mr.author, dict) else None
+                mention = f"@{author_username} " if author_username else ""
+
+                comment_body = (
+                    f"{marker}\n"
+                    f"Привет, {mention}! Кажется, описание этого Merge Request слишком короткое или отсутствует.\n\n"
+                    f"Пожалуйста, добавь более подробное описание, чтобы проверяющим было проще понять суть изменений и контекст задачи."
+                )
+
+                try:
+                    gitlab_client.create_mr_note(gl_proj, mr.iid, comment_body)
+                    logger.info(f"Added too short description warning to MR !{mr.iid} in project {gl_proj}.")
+                except Exception as e:
+                    logger.error(f"Error adding comment to MR !{mr.iid} in {gl_proj}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing too short description notifier for project {gl_proj}: {e}")
+
+    return "GitLab MR too short description notifier task completed."
