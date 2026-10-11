@@ -5899,3 +5899,57 @@ async def gitlab_mr_too_short_description_notifier_task():
             logger.error(f"Error processing too short description notifier for project {gl_proj}: {e}")
 
     return "GitLab MR too short description notifier task completed."
+
+async def jira_bug_missing_components_warning_task():
+    """
+    Phase 74: Checks active Jira Bug issues to ensure they have at least one component assigned.
+    If no components are assigned, a bot comment is added.
+    """
+    import logging
+    global JiraClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira bug missing components warning task.")
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_BUG_MISSING_COMPONENTS_WARNING -->"
+    warned_count = 0
+
+    for j_proj in tracked_projects:
+        try:
+            # Active bugs: not done, type Bug
+            jql = f'project = "{j_proj}" AND issuetype = "Bug" AND statusCategory != "Done"'
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                components = getattr(issue.fields, "components", [])
+                if components:
+                    continue
+
+                notes = jira_client.get_comments(issue.key)
+                if any(marker in getattr(note, "body", "") for note in notes):
+                    continue
+
+                assignee_username = getattr(issue.fields, 'assignee', None)
+                mention = f"[~accountid:{assignee_username.accountId}] " if assignee_username and hasattr(assignee_username, 'accountId') else ""
+
+                comment_body = (
+                    f"{marker}\n"
+                    f"Привет, {mention}! Кажется, у этого бага (Bug) не указан ни один компонент (Components).\n\n"
+                    f"Пожалуйста, добавь компоненты, чтобы было проще категоризировать и фильтровать ошибки."
+                )
+
+                try:
+                    jira_client.add_comment(issue.key, comment_body)
+                    logger.info(f"Added missing components warning to Bug {issue.key} in project {j_proj}.")
+                    warned_count += 1
+                except Exception as e:
+                    logger.error(f"Error adding comment to Bug {issue.key} in {j_proj}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing bug missing components warning for project {j_proj}: {e}")
+
+    return f"Jira bug missing components warning task completed: warned {warned_count} issues."

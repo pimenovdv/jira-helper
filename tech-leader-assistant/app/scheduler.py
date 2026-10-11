@@ -72,6 +72,7 @@ from .tasks import (
     jira_unassigned_bug_reminder_task,
     gitlab_mr_missing_description_reminder_task,
     jira_epic_completion_checker_task,
+    jira_bug_missing_components_warning_task,
 )
 import logging
 
@@ -385,6 +386,14 @@ def setup_scheduler():
         hour=11,
         minute=0,
         id="jira_unassigned_in_progress_warning",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        jira_bug_missing_components_warning_task,
+        "cron",
+        hour=11,
+        minute=15,
+        id="jira_bug_missing_components_warning_task",
         replace_existing=True,
     )
 
