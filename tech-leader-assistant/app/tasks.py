@@ -6008,3 +6008,48 @@ async def jira_bug_missing_environment_warning_task():
             logger.error(f"Error processing issue {issue.key}: {e}")
 
     return f"Jira bug missing environment warning task completed. Warned {warned_count} issues."
+
+def confluence_page_too_long_warning_task():
+    """Phase 76: Confluence Page Too Long Warning"""
+    from app.clients import settings
+    from app.clients.confluence_client import ConfluenceClient
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    spaces = [s.strip() for s in settings.get('CONFLUENCE_TRACKED_SPACES', '').split(',') if s.strip()]
+    if not spaces:
+        return
+
+    confluence = ConfluenceClient()
+    for space in spaces:
+        try:
+            pages = confluence.get_all_pages_from_space(space, expand='body.storage,version,history.lastUpdated')
+            if isinstance(pages, dict) and 'results' in pages:
+                pages = pages['results']
+
+            for page in pages:
+                body_storage = page.get('body', {}).get('storage', {}).get('value', '')
+                if len(body_storage) > 10000:
+                    page_id = page['id']
+
+                    comments_response = confluence.get_page_comments(page_id)
+                    if isinstance(comments_response, dict) and 'results' in comments_response:
+                        comments = comments_response['results']
+                    else:
+                        comments = comments_response
+
+                    warning_text = "This page seems exceptionally long. Consider splitting it into smaller, more focused sub-pages to improve readability and maintainability."
+                    already_warned = False
+                    for comment in comments:
+                        comment_body = comment.get('body', {}).get('storage', {}).get('value', '')
+                        if warning_text in comment_body:
+                            already_warned = True
+                            break
+
+                    if not already_warned:
+                        account_id = page.get('history', {}).get('lastUpdated', {}).get('by', {}).get('accountId')
+                        mention = f"[~accountid:{account_id}] " if account_id else ""
+                        confluence.add_page_comment(page_id, f"{mention}{warning_text}")
+        except Exception as e:
+            logger.error(f"Error checking Confluence space {space} for long pages: {e}")

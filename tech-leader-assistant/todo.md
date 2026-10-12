@@ -19,7 +19,7 @@
 - [x] If no environment is specified, post a comment asking the team to provide environment details for easier reproduction.
 
 ### Phase 76: Confluence Page Too Long Warning
-- [ ] Create `confluence_page_too_long_warning_task` to identify overly long Confluence pages and suggest splitting them.
+- [x] Create `confluence_page_too_long_warning_task` to identify overly long Confluence pages and suggest splitting them.
 
 ### Phase 77: GitLab MR Reviewer Self-Assignment Checker
 - [ ] Create `gitlab_mr_reviewer_self_assignment_warning_task` to advise against developers assigning themselves as the sole reviewer on their own Merge Requests.

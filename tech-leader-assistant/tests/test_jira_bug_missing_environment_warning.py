@@ -20,7 +20,7 @@ def mock_settings(mocker):
 
 @pytest.fixture
 def mock_jira_client_class(mocker):
-    return mocker.patch("app.tasks.JiraClient")
+    return mocker.patch("app.clients.jira_client.JiraClient")
 
 
 @pytest.mark.asyncio
