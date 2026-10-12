@@ -73,6 +73,8 @@ from .tasks import (
     gitlab_mr_missing_description_reminder_task,
     jira_epic_completion_checker_task,
     jira_bug_missing_components_warning_task,
+    jira_bug_missing_environment_warning_task,
+    confluence_page_too_long_warning_task,
 )
 import logging
 
@@ -394,6 +396,22 @@ def setup_scheduler():
         hour=11,
         minute=15,
         id="jira_bug_missing_components_warning_task",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        jira_bug_missing_environment_warning_task,
+        "cron",
+        hour=11,
+        minute=30,
+        id="jira_bug_missing_environment_warning_task",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        confluence_page_too_long_warning_task,
+        "cron",
+        hour=12,
+        minute=0,
+        id="confluence_page_too_long_warning_task",
         replace_existing=True,
     )
 

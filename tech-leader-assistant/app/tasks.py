@@ -5906,8 +5906,7 @@ async def jira_bug_missing_components_warning_task():
     If no components are assigned, a bot comment is added.
     """
     import logging
-    global JiraClient
-    from app.clients import settings
+    from app.clients.jira_client import JiraClient
 
     logger = logging.getLogger(__name__)
     logger.info("Running Jira bug missing components warning task.")
@@ -5953,3 +5952,104 @@ async def jira_bug_missing_components_warning_task():
             logger.error(f"Error processing bug missing components warning for project {j_proj}: {e}")
 
     return f"Jira bug missing components warning task completed: warned {warned_count} issues."
+
+async def jira_bug_missing_environment_warning_task():
+    """
+    Phase 75: Checks active Jira Bug issues to ensure they have the environment field populated.
+    If no environment is specified, a bot comment is added.
+    """
+    import logging
+    from app.clients.jira_client import JiraClient
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Jira bug missing environment warning task...")
+
+    try:
+        jira = JiraClient()
+    except Exception as e:
+        logger.error(f"Failed to initialize JiraClient: {e}")
+        return "Jira bug missing environment warning task failed (JiraClient init)"
+
+    jql = 'issuetype = Bug AND statusCategory != Done'
+    try:
+        issues = jira.search_issues(jql)
+    except Exception as e:
+        logger.error(f"Failed to fetch bugs from Jira: {e}")
+        return "Jira bug missing environment warning task failed (JQL search)"
+
+    bot_comment_marker = "Please provide the environment details"
+
+    warned_count = 0
+    for issue in issues:
+        try:
+            issue_key = issue.key
+            env = getattr(issue.fields, 'environment', None)
+
+            if not env:
+                comments_data = jira.get_comments(issue_key)
+                comments = comments_data.get('comments', []) if isinstance(comments_data, dict) else comments_data
+                already_commented = False
+                for c in comments:
+                    body = c.get('body', '') if isinstance(c, dict) else getattr(c, 'body', '')
+                    if bot_comment_marker in body:
+                        already_commented = True
+                        break
+
+                if not already_commented:
+                    logger.info(f"Bug {issue_key} is missing environment details. Adding warning comment.")
+                    comment_body = (
+                        "Hello! This bug appears to be missing environment details. "
+                        f"{bot_comment_marker} (e.g., OS, browser, app version) to help developers reproduce and fix the issue."
+                    )
+                    jira.add_comment(issue_key, comment_body)
+                    warned_count += 1
+
+        except Exception as e:
+            logger.error(f"Error processing issue {issue.key}: {e}")
+
+    return f"Jira bug missing environment warning task completed. Warned {warned_count} issues."
+
+def confluence_page_too_long_warning_task():
+    """Phase 76: Confluence Page Too Long Warning"""
+    from app.clients import settings
+    from app.clients.confluence_client import ConfluenceClient
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    spaces = [s.strip() for s in settings.get('CONFLUENCE_TRACKED_SPACES', '').split(',') if s.strip()]
+    if not spaces:
+        return
+
+    confluence = ConfluenceClient()
+    for space in spaces:
+        try:
+            pages = confluence.get_all_pages_from_space(space, expand='body.storage,version,history.lastUpdated')
+            if isinstance(pages, dict) and 'results' in pages:
+                pages = pages['results']
+
+            for page in pages:
+                body_storage = page.get('body', {}).get('storage', {}).get('value', '')
+                if len(body_storage) > 10000:
+                    page_id = page['id']
+
+                    comments_response = confluence.get_page_comments(page_id)
+                    if isinstance(comments_response, dict) and 'results' in comments_response:
+                        comments = comments_response['results']
+                    else:
+                        comments = comments_response
+
+                    warning_text = "This page seems exceptionally long. Consider splitting it into smaller, more focused sub-pages to improve readability and maintainability."
+                    already_warned = False
+                    for comment in comments:
+                        comment_body = comment.get('body', {}).get('storage', {}).get('value', '')
+                        if warning_text in comment_body:
+                            already_warned = True
+                            break
+
+                    if not already_warned:
+                        account_id = page.get('history', {}).get('lastUpdated', {}).get('by', {}).get('accountId')
+                        mention = f"[~accountid:{account_id}] " if account_id else ""
+                        confluence.add_page_comment(page_id, f"{mention}{warning_text}")
+        except Exception as e:
+            logger.error(f"Error checking Confluence space {space} for long pages: {e}")

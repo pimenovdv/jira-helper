@@ -19,7 +19,7 @@ def mock_settings(mocker):
 
 @pytest.fixture
 def mock_jira_client_class(mocker):
-    return mocker.patch("app.tasks.JiraClient")
+    return mocker.patch("app.clients.jira_client.JiraClient")
 
 @pytest.mark.asyncio
 async def test_jira_bug_missing_components_warning_task_adds_comment(mocker, mock_settings, mock_jira_client_class):
