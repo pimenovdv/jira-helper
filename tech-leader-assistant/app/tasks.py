@@ -5906,8 +5906,7 @@ async def jira_bug_missing_components_warning_task():
     If no components are assigned, a bot comment is added.
     """
     import logging
-    global JiraClient
-    from app.clients import settings
+    from app.clients.jira_client import JiraClient
 
     logger = logging.getLogger(__name__)
     logger.info("Running Jira bug missing components warning task.")
@@ -5953,3 +5952,59 @@ async def jira_bug_missing_components_warning_task():
             logger.error(f"Error processing bug missing components warning for project {j_proj}: {e}")
 
     return f"Jira bug missing components warning task completed: warned {warned_count} issues."
+
+async def jira_bug_missing_environment_warning_task():
+    """
+    Phase 75: Checks active Jira Bug issues to ensure they have the environment field populated.
+    If no environment is specified, a bot comment is added.
+    """
+    import logging
+    from app.clients.jira_client import JiraClient
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Jira bug missing environment warning task...")
+
+    try:
+        jira = JiraClient()
+    except Exception as e:
+        logger.error(f"Failed to initialize JiraClient: {e}")
+        return "Jira bug missing environment warning task failed (JiraClient init)"
+
+    jql = 'issuetype = Bug AND statusCategory != Done'
+    try:
+        issues = jira.search_issues(jql)
+    except Exception as e:
+        logger.error(f"Failed to fetch bugs from Jira: {e}")
+        return "Jira bug missing environment warning task failed (JQL search)"
+
+    bot_comment_marker = "Please provide the environment details"
+
+    warned_count = 0
+    for issue in issues:
+        try:
+            issue_key = issue.key
+            env = getattr(issue.fields, 'environment', None)
+
+            if not env:
+                comments_data = jira.get_comments(issue_key)
+                comments = comments_data.get('comments', []) if isinstance(comments_data, dict) else comments_data
+                already_commented = False
+                for c in comments:
+                    body = c.get('body', '') if isinstance(c, dict) else getattr(c, 'body', '')
+                    if bot_comment_marker in body:
+                        already_commented = True
+                        break
+
+                if not already_commented:
+                    logger.info(f"Bug {issue_key} is missing environment details. Adding warning comment.")
+                    comment_body = (
+                        "Hello! This bug appears to be missing environment details. "
+                        f"{bot_comment_marker} (e.g., OS, browser, app version) to help developers reproduce and fix the issue."
+                    )
+                    jira.add_comment(issue_key, comment_body)
+                    warned_count += 1
+
+        except Exception as e:
+            logger.error(f"Error processing issue {issue.key}: {e}")
+
+    return f"Jira bug missing environment warning task completed. Warned {warned_count} issues."

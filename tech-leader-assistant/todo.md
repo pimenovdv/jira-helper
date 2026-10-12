@@ -12,8 +12,14 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-73: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, and various warning tasks for missing attachments, unassigned/stale tasks, missing PR descriptions/approvals, unestimated bugs, and missing MR reviewers/too short descriptions.
+- [x] Phases 1-74: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, and various warning tasks for missing attachments, unassigned/stale tasks, missing PR descriptions/approvals, unestimated bugs, missing MR reviewers/too short descriptions, and missing components warnings for Jira bugs.
 
-### Phase 74: Jira Bug Missing Components Warning
-- [x] Create `jira_bug_missing_components_warning_task` to check active Jira Bug issues to ensure they have at least one component assigned.
-- [x] If no components are assigned, post a comment asking the team to add components to better categorize bugs.
+### Phase 75: Jira Bug Missing Environment Warning
+- [x] Create `jira_bug_missing_environment_warning_task` to check active Jira Bug issues to ensure they have the environment field populated.
+- [x] If no environment is specified, post a comment asking the team to provide environment details for easier reproduction.
+
+### Phase 76: Confluence Page Too Long Warning
+- [ ] Create `confluence_page_too_long_warning_task` to identify overly long Confluence pages and suggest splitting them.
+
+### Phase 77: GitLab MR Reviewer Self-Assignment Checker
+- [ ] Create `gitlab_mr_reviewer_self_assignment_warning_task` to advise against developers assigning themselves as the sole reviewer on their own Merge Requests.
