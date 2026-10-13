@@ -75,6 +75,7 @@ from .tasks import (
     jira_bug_missing_components_warning_task,
     jira_bug_missing_environment_warning_task,
     confluence_page_too_long_warning_task,
+    gitlab_mr_reviewer_self_assignment_warning_task,
 )
 import logging
 
@@ -412,6 +413,14 @@ def setup_scheduler():
         hour=12,
         minute=0,
         id="confluence_page_too_long_warning_task",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        gitlab_mr_reviewer_self_assignment_warning_task,
+        "cron",
+        hour=12,
+        minute=15,
+        id="gitlab_mr_reviewer_self_assignment_warning_task",
         replace_existing=True,
     )
 
