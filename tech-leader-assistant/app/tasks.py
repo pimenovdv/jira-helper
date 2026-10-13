@@ -6053,3 +6053,46 @@ def confluence_page_too_long_warning_task():
                         confluence.add_page_comment(page_id, f"{mention}{warning_text}")
         except Exception as e:
             logger.error(f"Error checking Confluence space {space} for long pages: {e}")
+
+async def gitlab_mr_reviewer_self_assignment_warning_task():
+    """
+    Phase 77: GitLab MR Reviewer Self-Assignment Checker
+    Advises against developers assigning themselves as the sole reviewer on their own Merge Requests.
+    """
+    logger.info("Running GitLab MR reviewer self-assignment warning task.")
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_SELF_ASSIGNMENT_WARNING -->"
+
+    for gl_proj in tracked_projects:
+        try:
+            mrs = gitlab_client.get_merge_requests(gl_proj, state="opened")
+            for mr in mrs:
+                author = getattr(mr, "author", None)
+                reviewers = getattr(mr, "reviewers", [])
+
+                if author and isinstance(author, dict) and len(reviewers) == 1:
+                    reviewer = reviewers[0]
+                    if reviewer.get('id') == author.get('id'):
+                        notes = mr.notes.list(all=True)
+                        if any(marker in (note.body or "") for note in notes):
+                            continue
+
+                        author_username = author.get('username')
+                        mention = f"@{author_username} " if author_username else ""
+
+                        comment_body = (
+                            f"{marker}\n"
+                            f"{mention}It appears you have assigned yourself as the sole reviewer of this Merge Request. "
+                            f"To ensure proper code review, please assign another team member to review your changes."
+                        )
+                        mr.notes.create({'body': comment_body})
+                        logger.info(f"Posted self-assignment warning on MR !{mr.iid} in project {gl_proj}.")
+
+        except Exception as e:
+            logger.error(f"Error processing self-assignment warning for project {gl_proj}: {e}")
+
+    return "GitLab MR reviewer self-assignment warning task completed."
