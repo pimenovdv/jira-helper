@@ -6096,3 +6096,64 @@ async def gitlab_mr_reviewer_self_assignment_warning_task():
             logger.error(f"Error processing self-assignment warning for project {gl_proj}: {e}")
 
     return "GitLab MR reviewer self-assignment warning task completed."
+
+async def gitlab_mr_missing_milestone_warning_task():
+    """
+    Phase 78: GitLab MR Missing Milestone Checker
+    Iterates through open Merge Requests in tracked projects and warns if a milestone is missing.
+    """
+    import logging
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running GitLab MR missing milestone warning task.")
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_MISSING_MILESTONE_WARNING -->"
+    warned_count = 0
+
+    for gl_proj in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_merge_requests(gl_proj, state="opened")
+            for mr in mrs:
+                milestone = getattr(mr, "milestone", None)
+                if milestone is not None:
+                    continue
+
+                notes = mr.notes.list(all=True)
+
+                already_warned = False
+                for note in notes:
+                    note_body = getattr(note, "body", "") or ""
+                    if marker in note_body:
+                        already_warned = True
+                        break
+
+                if already_warned:
+                    continue
+
+                author = getattr(mr, "author", None)
+                author_username = author.get('username') if author and isinstance(author, dict) else None
+                mention = f"@{author_username} " if author_username else ""
+
+                comment_body = (
+                    f"{marker}\n"
+                    f"Привет, {mention}! Кажется, у этого Merge Request не указан Milestone.\n\n"
+                    f"Пожалуйста, добавь Milestone, чтобы было проще планировать релизы и отслеживать прогресс."
+                )
+
+                try:
+                    gitlab_client.create_mr_note(gl_proj, mr.iid, comment_body)
+                    logger.info(f"Posted missing milestone warning on MR !{mr.iid} in project {gl_proj}.")
+                    warned_count += 1
+                except Exception as e:
+                    logger.error(f"Error posting missing milestone warning on MR !{mr.iid} in {gl_proj}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing missing milestone warning for project {gl_proj}: {e}")
+
+    return f"GitLab MR missing milestone warning task completed: warned {warned_count} MRs."
