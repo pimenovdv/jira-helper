@@ -6097,6 +6097,65 @@ async def gitlab_mr_reviewer_self_assignment_warning_task():
 
     return "GitLab MR reviewer self-assignment warning task completed."
 
+async def jira_epic_missing_due_date_warning_task():
+    """
+    Phase 79: Jira Epic Missing Due Date Warning
+    Iterates through open Epics and warns if a due date is missing.
+    """
+    import logging
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira Epic missing due date warning task.")
+
+    jira_client = JiraClient()
+    project_key = settings.get("JIRA_PROJECT_KEY")
+    if not project_key:
+        logger.error("JIRA_PROJECT_KEY is not set.")
+        return "Jira Epic missing due date warning task aborted: No project key."
+
+    jql = f'project = {project_key} AND issuetype = Epic AND statusCategory != Done'
+    issues = jira_client.search_issues(jql)
+    marker = "<!-- AUTO_GENERATED_MISSING_DUE_DATE_WARNING -->"
+    warned_count = 0
+
+    for issue in issues:
+        due_date = getattr(issue.fields, "duedate", None)
+        if due_date is not None:
+            continue
+
+        comments = jira_client.get_comments(issue.key)
+        already_warned = False
+        for comment in comments:
+            comment_body = getattr(comment, "body", "") or ""
+            if marker in comment_body:
+                already_warned = True
+                break
+
+        if already_warned:
+            continue
+
+        assignee = getattr(issue.fields, "assignee", None)
+        assignee_name = getattr(assignee, "displayName", "Команда") if assignee else "Команда"
+        mention = f"[~{getattr(assignee, 'accountId')}]" if assignee and getattr(assignee, "accountId", None) else assignee_name
+
+        comment_body = (
+            f"{marker}\n"
+            f"Привет, {mention}! Кажется, у этого эпика не указан Due Date.\n\n"
+            f"Пожалуйста, добавь срок завершения, чтобы было проще планировать релизы и отслеживать прогресс по roadmap."
+        )
+
+        try:
+            res = jira_client.add_comment(issue.key, comment_body)
+            if res:
+                logger.info(f"Posted missing due date warning on Epic {issue.key}.")
+                warned_count += 1
+        except Exception as e:
+            logger.error(f"Error posting missing due date warning on Epic {issue.key}: {e}")
+
+    return f"Jira Epic missing due date warning task completed: warned {warned_count} Epics."
+
 async def gitlab_mr_missing_milestone_warning_task():
     """
     Phase 78: GitLab MR Missing Milestone Checker
