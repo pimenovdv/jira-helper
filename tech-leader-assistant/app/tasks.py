@@ -6156,6 +6156,68 @@ async def jira_epic_missing_due_date_warning_task():
 
     return f"Jira Epic missing due date warning task completed: warned {warned_count} Epics."
 
+
+async def jira_epic_without_child_issues_warning_task():
+    """
+    Phase 80: Jira Epic Without Child Issues Warning
+    Iterates through open Epics and warns if they have no child issues linked.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira Epic without child issues warning task.")
+
+    jira_client = JiraClient()
+    project_key = settings.get("JIRA_PROJECT_KEY")
+    if not project_key:
+        logger.error("JIRA_PROJECT_KEY is not set.")
+        return "Jira Epic without child issues warning task aborted: No project key."
+
+    jql = f'project = {project_key} AND issuetype = Epic AND statusCategory != Done'
+    issues = jira_client.search_issues(jql)
+    marker = "<!-- AUTO_GENERATED_EPIC_NO_CHILD_ISSUES_WARNING -->"
+    warned_count = 0
+
+    for issue in issues:
+        child_jql = f'"Epic Link" = {issue.key} OR parent = {issue.key}'
+        children = jira_client.search_issues(child_jql)
+
+        if children:
+            continue
+
+        comments = jira_client.get_comments(issue.key)
+        already_warned = False
+        for comment in comments:
+            comment_body = getattr(comment, "body", "") or ""
+            if marker in comment_body:
+                already_warned = True
+                break
+
+        if already_warned:
+            continue
+
+        assignee = getattr(issue.fields, "assignee", None)
+        assignee_name = getattr(assignee, "displayName", "Команда") if assignee else "Команда"
+        mention = f"[~{getattr(assignee, 'accountId')}]" if assignee and getattr(assignee, "accountId", None) else assignee_name
+
+        comment_body = (
+            f"{marker}\n"
+            f"Привет, {mention}! У этого эпика сейчас нет привязанных дочерних задач (child issues).\n\n"
+            f"Эпик без задач не помогает отслеживать работу. Пожалуйста, добавь задачи в этот эпик или закрой его, если он больше не актуален."
+        )
+
+        try:
+            res = jira_client.add_comment(issue.key, comment_body)
+            if res:
+                logger.info(f"Posted no child issues warning to Jira Epic {issue.key}.")
+                warned_count += 1
+            else:
+                logger.error(f"Failed to post comment to {issue.key}.")
+        except Exception as e:
+            logger.error(f"Error checking Epic without child issues for {issue.key}: {e}")
+
+    return f"Jira Epic without child issues warning task completed: warned {warned_count} Epics."
+
 async def gitlab_mr_missing_milestone_warning_task():
     """
     Phase 78: GitLab MR Missing Milestone Checker
