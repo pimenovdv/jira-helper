@@ -6157,6 +6157,47 @@ async def jira_epic_missing_due_date_warning_task():
     return f"Jira Epic missing due date warning task completed: warned {warned_count} Epics."
 
 
+async def jira_story_missing_subtasks_warning_task():
+    """
+    Phase 81: Jira Story Missing Subtasks Warning
+    Iterates through open Stories and warns if they have no subtasks.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira Story missing subtasks warning task.")
+
+    jira_client = JiraClient()
+    project_key = settings.get("JIRA_PROJECT_KEY")
+    if not project_key:
+        logger.error("JIRA_PROJECT_KEY is not set.")
+        return "Jira Story missing subtasks warning task aborted: No project key."
+
+    jql = f'project = {project_key} AND issuetype = Story AND statusCategory != Done'
+    issues = jira_client.search_issues(jql)
+    marker = "<!-- AUTO_GENERATED_STORY_MISSING_SUBTASKS_WARNING -->"
+    warned_count = 0
+
+    for issue in issues:
+        subtasks = getattr(issue.fields, "subtasks", [])
+        if not subtasks:
+            comments = jira_client.get_comments(issue.key)
+            already_warned = any(marker in (getattr(c, "body", "") or "") for c in comments)
+            if not already_warned:
+                message = (
+                    f"{marker}\n"
+                    "⚠️ **Missing Subtasks Warning**\n\n"
+                    "This Story currently has no subtasks linked. "
+                    "Please decompose this Story into actionable subtasks to improve tracking and clarity."
+                )
+                jira_client.add_comment(issue.key, message)
+                warned_count += 1
+                logger.info(f"Added missing subtasks warning to Story: {issue.key}")
+
+    logger.info(f"Jira Story missing subtasks warning task completed. Warned on {warned_count} Stories.")
+    return f"Jira Story missing subtasks warning task completed. Warned on {warned_count} Stories."
+
+
 async def jira_epic_without_child_issues_warning_task():
     """
     Phase 80: Jira Epic Without Child Issues Warning

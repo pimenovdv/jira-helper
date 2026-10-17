@@ -12,9 +12,9 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-79: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, various warning tasks for missing attachments, unassigned/stale tasks, missing PR descriptions/approvals, unestimated bugs, missing MR reviewers/too short descriptions, missing components/environment warnings for Jira bugs, confluence page length checks, MR reviewer self-assignment checks, GitLab MR missing milestone warning, and Jira Epic Missing Due Date Warning.
+- [x] Phases 1-80: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, various warning tasks for missing attachments, unassigned/stale tasks, missing PR descriptions/approvals, unestimated bugs, missing MR reviewers/too short descriptions, missing components/environment warnings for Jira bugs, confluence page length checks, MR reviewer self-assignment checks, GitLab MR missing milestone warning, Jira Epic Missing Due Date Warning, and Jira Epic Without Child Issues Warning.
 
-### Phase 80: Jira Epic Without Child Issues Warning
-- [x] Create `jira_epic_without_child_issues_warning_task` to iterate through open Epics and warn if they have no child issues linked to them.
+### Phase 81: Jira Story Missing Subtasks Warning
+- [x] Create `jira_story_missing_subtasks_warning_task` to iterate through open Stories and warn if they have no subtasks.
 - [x] Schedule the task to run periodically.
-- [x] Add tests to verify the behavior of `jira_epic_without_child_issues_warning_task`.
+- [x] Add tests to verify the behavior of `jira_story_missing_subtasks_warning_task`.
