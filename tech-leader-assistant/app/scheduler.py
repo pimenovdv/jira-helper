@@ -464,6 +464,16 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    from app.tasks import jira_bug_missing_affected_version_warning_task
+    scheduler.add_job(
+        jira_bug_missing_affected_version_warning_task,
+        "cron",
+        hour=10,
+        minute=35,
+        id="jira_bug_missing_affected_version_warning_task",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
 
 

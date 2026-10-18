@@ -6157,6 +6157,56 @@ async def jira_epic_missing_due_date_warning_task():
     return f"Jira Epic missing due date warning task completed: warned {warned_count} Epics."
 
 
+async def jira_bug_missing_affected_version_warning_task():
+    """
+    Phase 82: Jira Bug Missing Affected Version Warning
+    Iterates through open bugs and warns if the 'versions' (Affected Version) field is empty.
+    """
+    import logging
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira Bug missing affected version warning task.")
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    if not tracked_projects:
+        logger.error("JIRA_TRACKED_PROJECTS is not set.")
+        return "Jira Bug missing affected version warning task aborted: No tracked projects."
+
+    marker = "<!-- AUTO_GENERATED_BUG_MISSING_AFFECTED_VERSION_WARNING -->"
+    warned_count = 0
+
+    for project in tracked_projects:
+        jql = f'project = "{project}" AND issuetype = Bug AND statusCategory != Done'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Failed to search bugs in project {project}: {e}")
+            continue
+
+        for issue in issues:
+            versions = getattr(issue.fields, "versions", [])
+            if not versions:
+                comments = jira_client.get_comments(issue.key)
+                already_warned = any(marker in (getattr(c, "body", "") or "") for c in comments)
+                if not already_warned:
+                    message = (
+                        f"{marker}\n"
+                        "⚠️ **Missing Affected Version Warning**\n\n"
+                        "This Bug currently has no affected versions (`versions`) linked. "
+                        "Please specify the affected versions so that QA and development teams know which versions are impacted."
+                    )
+                    jira_client.add_comment(issue.key, message)
+                    warned_count += 1
+                    logger.info(f"Added missing affected version warning to Bug: {issue.key}")
+
+    return f"Jira Bug missing affected version warning task completed. Warned {warned_count} bugs."
+
+
 async def jira_story_missing_subtasks_warning_task():
     """
     Phase 81: Jira Story Missing Subtasks Warning
