@@ -5578,6 +5578,61 @@ async def jira_unestimated_bug_warning_task():
                 logger.error(f"Error checking unestimated bug {issue.key}: {e}")
 
     return f"Jira unestimated bug warning task completed: warned {warned_count} issues."
+
+async def jira_subtask_missing_estimate_warning_task():
+    """
+    Finds open Sub-tasks in Jira that lack an original estimate (timeoriginalestimate).
+    Adds a comment warning that subtasks should be estimated to track capacity.
+    """
+    logger.info("Running Jira subtask missing estimate warning task.")
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_ESTIMATE_WARNING -->"
+    warned_count = 0
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND issuetype = "Sub-task" AND statusCategory != Done'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {j_proj}: {e}")
+            continue
+
+        for issue in issues:
+            time_estimate = getattr(issue.fields, "timeoriginalestimate", None)
+
+            if time_estimate is not None:
+                continue
+
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(marker in getattr(c, "body", "") for c in comments)
+
+                if not already_reminded:
+                    logger.info(f"Adding subtask missing estimate warning to {issue.key}")
+                    assignee_mention = ""
+                    if getattr(issue.fields, "assignee", None) and hasattr(issue.fields.assignee, "accountId"):
+                        assignee_mention = f"[~accountid:{issue.fields.assignee.accountId}] "
+
+                    comment_body = (
+                        f"⚠️ **Subtask Missing Estimate Warning**\n\n"
+                        f"{assignee_mention}This subtask lacks an original estimate (timeoriginalestimate). "
+                        f"Please provide an estimate in hours/days to track team capacity accurately.\n\n"
+                        f"{marker}"
+                    )
+                    jira_client.add_comment(issue.key, comment_body)
+                    warned_count += 1
+            except Exception as e:
+                logger.error(f"Error checking missing estimate subtask {issue.key}: {e}")
+
+    return f"Jira subtask missing estimate warning task completed: warned {warned_count} issues."
 async def gitlab_mr_stale_needs_work_reminder_task():
     """
     Checks open MRs in tracked GitLab projects.
