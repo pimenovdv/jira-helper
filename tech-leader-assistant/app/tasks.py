@@ -5633,6 +5633,64 @@ async def jira_subtask_missing_estimate_warning_task():
                 logger.error(f"Error checking missing estimate subtask {issue.key}: {e}")
 
     return f"Jira subtask missing estimate warning task completed: warned {warned_count} issues."
+
+async def jira_subtask_missing_assignee_warning_task():
+    """
+    Finds open Sub-tasks in Jira that lack an assignee.
+    Adds a comment warning that subtasks should be assigned.
+    """
+    logger.info("Running Jira subtask missing assignee warning task.")
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    warned_count = 0
+
+    for project in jira_projects:
+        project = project.strip()
+        if not project:
+            continue
+
+        jql = f'project = "{project}" AND issuetype = "Sub-task" AND statusCategory != Done AND assignee is EMPTY'
+        try:
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                issue_key = issue.key
+
+                comments = jira_client.get_comments(issue_key)
+                already_warned = any(
+                    "<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_ASSIGNEE_WARNING -->" in getattr(c, "body", "")
+                    for c in comments
+                )
+                if already_warned:
+                    continue
+
+                warning_message = (
+                    f"Hi there,\n\n"
+                    f"This subtask is currently unassigned. Please assign it to the appropriate team member to ensure it gets worked on.\n\n"
+                    f"<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_ASSIGNEE_WARNING -->"
+                )
+
+                # Try to tag the parent assignee if available, or the reporter
+                parent = getattr(issue.fields, "parent", None)
+                if parent and getattr(parent.fields, "assignee", None):
+                    parent_assignee_id = getattr(parent.fields.assignee, "accountId", None)
+                    if parent_assignee_id:
+                        warning_message = f"[~accountid:{parent_assignee_id}] " + warning_message
+                else:
+                    reporter_id = getattr(issue.fields.reporter, "accountId", None) if getattr(issue.fields, "reporter", None) else None
+                    if reporter_id:
+                        warning_message = f"[~accountid:{reporter_id}] " + warning_message
+
+                jira_client.add_comment(issue_key, warning_message)
+                logger.info(f"Added missing assignee warning to subtask {issue_key}")
+                warned_count += 1
+
+        except Exception as e:
+            logger.error(f"Error checking subtask assignees for Jira project {project}: {e}")
+
+    return f"Jira subtask missing assignee warning task completed: warned {warned_count} issues."
 async def gitlab_mr_stale_needs_work_reminder_task():
     """
     Checks open MRs in tracked GitLab projects.
