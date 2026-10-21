@@ -12,9 +12,9 @@
 ## Project Decomposition & Implementation Plan
 
 ### Completed Phases
-- [x] Phases 1-83: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, various warning tasks for missing attachments, unassigned/stale tasks, missing PR descriptions/approvals, unestimated bugs, missing MR reviewers/too short descriptions, missing components/environment warnings for Jira bugs, confluence page length checks, MR reviewer self-assignment checks, GitLab MR missing milestone warning, Jira Epic Missing Due Date Warning, Jira Epic Without Child Issues Warning, Jira Story Missing Subtasks Warning, Jira Bug Missing Affected Version Warning, and Jira Subtask Missing Estimate Warning.
+- [x] Phases 1-84: Initial setup, core sync, DB, RAG workflows, code quality automations, assorted Jira/GitLab/Confluence reminders and checks, various warning tasks for missing attachments, unassigned/stale tasks, missing PR descriptions/approvals, unestimated bugs, missing MR reviewers/too short descriptions, missing components/environment warnings for Jira bugs, confluence page length checks, MR reviewer self-assignment checks, GitLab MR missing milestone warning, Jira Epic Missing Due Date Warning, Jira Epic Without Child Issues Warning, Jira Story Missing Subtasks Warning, Jira Bug Missing Affected Version Warning, Jira Subtask Missing Estimate Warning, and Jira Subtask Missing Assignee Warning.
 
-### Phase 84: Jira Subtask Missing Assignee Warning
-- [x] Create `jira_subtask_missing_assignee_warning_task` to iterate through open subtasks in Jira and warn if they are missing an assignee.
+### Phase 85: Jira Bug Missing Priority Warning
+- [x] Create `jira_bug_missing_priority_warning_task` to iterate through open bugs in Jira and warn if they are missing a priority.
 - [x] Schedule the task to run periodically in `app/scheduler.py`.
-- [x] Add tests in `tests/test_jira_subtask_missing_assignee_warning.py` to verify the behavior.
+- [x] Add tests in `tests/test_jira_bug_missing_priority_warning.py` to verify the behavior.

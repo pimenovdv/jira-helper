@@ -482,6 +482,15 @@ def setup_scheduler():
         id="jira_bug_missing_affected_version_warning_task",
         replace_existing=True,
     )
+    from app.tasks import jira_bug_missing_priority_warning_task
+    scheduler.add_job(
+        jira_bug_missing_priority_warning_task,
+        "cron",
+        hour=10,
+        minute=40,
+        id="jira_bug_missing_priority_warning_task",
+        replace_existing=True,
+    )
     from app.tasks import jira_subtask_missing_assignee_warning_task
     scheduler.add_job(
         jira_subtask_missing_assignee_warning_task,

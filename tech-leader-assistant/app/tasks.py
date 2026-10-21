@@ -6482,3 +6482,45 @@ async def gitlab_mr_missing_milestone_warning_task():
             logger.error(f"Error processing missing milestone warning for project {gl_proj}: {e}")
 
     return f"GitLab MR missing milestone warning task completed: warned {warned_count} MRs."
+
+
+async def jira_bug_missing_priority_warning_task():
+    """
+    Finds open Bugs in Jira that lack a priority.
+    Adds a comment warning that bugs should have a priority.
+    """
+    logger.info("Running Jira bug missing priority warning task.")
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    warned_count = 0
+
+    for project in jira_projects:
+        project = project.strip()
+        if not project:
+            continue
+
+        jql = f'project = "{project}" AND issuetype = "Bug" AND statusCategory != Done'
+        try:
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                priority = getattr(issue.fields, 'priority', None)
+                if not priority:
+                    comments = jira_client.get_comments(issue.key)
+                    already_warned = any("<!-- AUTO_GENERATED_JIRA_BUG_MISSING_PRIORITY_WARNING -->" in getattr(c, "body", "") for c in comments)
+
+                    if not already_warned:
+                        warning_msg = (
+                            "<!-- AUTO_GENERATED_JIRA_BUG_MISSING_PRIORITY_WARNING -->\n"
+                            "⚠️ **Missing Priority Warning**\n\n"
+                            "This bug is currently missing a priority. Please assign an appropriate priority level to help with triaging."
+                        )
+                        jira_client.add_comment(issue.key, warning_msg)
+                        logger.info(f"Added missing priority warning to {issue.key}")
+                        warned_count += 1
+        except Exception as e:
+            logger.error(f"Error checking bug priority for project {project}: {e}")
+
+    return f"Jira bug missing priority warning task completed. Warned {warned_count} bugs."
