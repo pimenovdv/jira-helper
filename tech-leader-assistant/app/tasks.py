@@ -6122,6 +6122,84 @@ async def jira_bug_missing_environment_warning_task():
 
     return f"Jira bug missing environment warning task completed. Warned {warned_count} issues."
 
+async def confluence_missing_labels_warning_task():
+    """
+    Checks tracked Confluence spaces for pages that have no labels.
+    If a page has no labels, generates a polite warning message using LLM
+    and adds it as a comment, mentioning the author.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Confluence missing labels warning task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Confluence missing labels warning task.")
+        return "Confluence missing labels warning task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    confluence_client = ConfluenceClient()
+    tracked_spaces = settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",")
+    tracked_spaces = [s.strip() for s in tracked_spaces if s.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_CONFLUENCE_MISSING_LABELS_WARNING -->"
+
+    for space in tracked_spaces:
+        try:
+            pages_response = confluence_client.client.get_all_pages_from_space(
+                space, expand='history.lastUpdated'
+            )
+            pages = pages_response.get("results", []) if isinstance(pages_response, dict) else pages_response
+
+            for page in pages:
+                try:
+                    page_id = page["id"]
+                    labels_response = confluence_client.client.get_page_labels(page_id)
+                    labels = labels_response.get("results", []) if isinstance(labels_response, dict) else labels_response
+
+                    if not labels:
+                        comments_response = confluence_client.client.get_page_comments(page_id, expand='body.storage')
+                        comments = comments_response.get("results", []) if isinstance(comments_response, dict) else comments_response
+
+                        already_warned = False
+                        for comment in comments:
+                            comment_body = comment.get('body', {}).get('storage', {}).get('value', '')
+
+                            if reminder_marker in comment_body:
+                                already_warned = True
+                                break
+
+                        if not already_warned:
+                            # Attempt to get author
+                            account_id = None
+                            try:
+                                account_id = page.get("history", {}).get("lastUpdated", {}).get("by", {}).get("accountId")
+                            except Exception:
+                                pass
+
+                            author_mention = f"[~accountid:{account_id}]" if account_id else "Автор"
+
+                            prompt = (
+                                f"Вы — технический лидер. Напишите короткое и вежливое сообщение для {author_mention}. "
+                                "Напомните, что на странице Confluence отсутствуют метки (labels). "
+                                "Попросите добавить соответствующие метки, чтобы страницу было легче найти "
+                                "и правильно категоризировать. Сообщение должно быть на русском языке."
+                            )
+                            response = await llm.ainvoke([HumanMessage(content=prompt)])
+                            message = f"{response.content}\n\n{reminder_marker}"
+
+                            confluence_client.client.add_comment(page_id, message)
+                            logger.info(f"Added missing labels warning to Confluence page {page_id}")
+                except Exception as e:
+                    logger.error(f"Error processing Confluence page {page.get('id', 'unknown')} for missing labels: {e}")
+        except Exception as e:
+            logger.error(f"Error processing Confluence space {space} for missing labels: {e}")
+
+    return "Confluence missing labels warning task completed."
+
+
 def confluence_page_too_long_warning_task():
     """Phase 76: Confluence Page Too Long Warning"""
     from app.clients import settings
