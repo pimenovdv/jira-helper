@@ -501,6 +501,16 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    from app.tasks import confluence_missing_labels_warning_task
+    scheduler.add_job(
+        confluence_missing_labels_warning_task,
+        "cron",
+        hour=14,
+        minute=0,
+        id="confluence_missing_labels_warning_task",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
 
 
