@@ -6122,6 +6122,93 @@ async def jira_bug_missing_environment_warning_task():
 
     return f"Jira bug missing environment warning task completed. Warned {warned_count} issues."
 
+async def gitlab_mr_stale_wip_warning_task():
+    """
+    Checks open MRs in tracked GitLab projects.
+    If an MR is a Draft/WIP and hasn't been updated for > 7 days, it leaves an automated comment
+    reminding the author to update or close it.
+    """
+    import logging
+    from datetime import datetime, timezone
+    from langchain_core.messages import HumanMessage, SystemMessage
+    # Use global imports so mocker can patch them in app.tasks
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated GitLab MR stale WIP warning task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping GitLab MR stale WIP warning task.")
+        return "GitLab MR stale WIP warning task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    warning_marker = "<!-- AUTO_GENERATED_STALE_WIP_WARNING -->"
+    now = datetime.now(timezone.utc)
+
+    for project_id in tracked_projects:
+        try:
+            mrs = gitlab_client.get_project_merge_requests(project_id, state="opened")
+            for mr in mrs:
+                title = getattr(mr, "title", "").lower()
+                is_draft = getattr(mr, "draft", False) or title.startswith("draft:") or title.startswith("wip:")
+
+                if not is_draft:
+                    continue
+
+                updated_at_str = getattr(mr, "updated_at", None)
+                if not updated_at_str:
+                    continue
+
+                if updated_at_str.endswith('Z'):
+                    updated_at_str = updated_at_str[:-1] + '+00:00'
+                updated_at = datetime.fromisoformat(updated_at_str)
+
+                if updated_at.tzinfo is None:
+                    updated_at = updated_at.replace(tzinfo=timezone.utc)
+
+                days_inactive = (now - updated_at).days
+                if days_inactive <= 7:
+                    continue
+
+                try:
+                    notes = mr.notes.list(all=True)
+                    has_warning = any(warning_marker in getattr(note, 'body', '') for note in notes)
+                    if has_warning:
+                        continue
+
+                    author = getattr(mr, "author", {})
+                    author_username = "author"
+                    if isinstance(author, dict):
+                        author_username = author.get("username", "author")
+                    else:
+                        author_username = getattr(author, 'username', 'author')
+
+                    system_prompt = SystemMessage(
+                        content="You are an AI assistant helping a tech lead. Be polite and concise."
+                    )
+                    user_prompt = HumanMessage(
+                        content=f"Write a short, polite comment in Russian to the developer @{author_username} "
+                                f"reminding them that this Draft/WIP Merge Request has not been updated in over {days_inactive} days. "
+                                f"Ask if it is still relevant or if it can be closed."
+                    )
+                    response = llm.invoke([system_prompt, user_prompt])
+                    comment_body = f"{response.content}\n\n{warning_marker}"
+
+                    gitlab_client.create_mr_note(project_id, mr.iid, comment_body)
+                    logger.info(f"Added stale WIP warning to MR !{mr.iid} in project {project_id}.")
+
+                except Exception as e:
+                    logger.error(f"Failed to process notes/comment for MR !{mr.iid} in project {project_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to check MRs for project {project_id}: {e}")
+
+    return "GitLab MR stale WIP warning task completed"
+
 async def confluence_missing_labels_warning_task():
     """
     Checks tracked Confluence spaces for pages that have no labels.
