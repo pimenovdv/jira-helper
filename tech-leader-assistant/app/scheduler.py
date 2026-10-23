@@ -511,6 +511,16 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    from app.tasks import gitlab_mr_stale_wip_warning_task
+    scheduler.add_job(
+        gitlab_mr_stale_wip_warning_task,
+        "cron",
+        hour='*/12',
+        minute=0,
+        id="gitlab_mr_stale_wip_warning_task",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
 
 
