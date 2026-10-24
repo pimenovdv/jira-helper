@@ -25,6 +25,6 @@
 - [x] Add tests to verify the behavior.
 
 ### Phase 88: Jira Blocked Issue Follow-up Reminder
-- [ ] Create `jira_blocked_issue_followup_reminder_task` to remind assignees of issues that have been in "Blocked" status for an extended period.
-- [ ] Schedule the task to run periodically in `app/scheduler.py`.
-- [ ] Add tests to verify the behavior.
+- [x] Create `jira_blocked_issue_followup_reminder_task` to remind assignees of issues that have been in "Blocked" status for an extended period.
+- [x] Schedule the task to run periodically in `app/scheduler.py`.
+- [x] Add tests to verify the behavior.

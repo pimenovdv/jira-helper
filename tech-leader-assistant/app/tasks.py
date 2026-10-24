@@ -2290,6 +2290,60 @@ async def jira_inactive_reporter_reminder_task():
 
     return "Jira inactive reporter reminder task complete."
 
+async def jira_blocked_issue_followup_reminder_task():
+    """
+    Checks Jira issues in "Blocked" status for more than 5 days that have an assignee,
+    and posts a comment tagging the assignee to ask for an update.
+    """
+    import logging
+    from langchain_core.messages import HumanMessage
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting automated Jira blocked issue followup reminder task...")
+
+    openai_api_key = settings.get("OPENAI_API_KEY", "")
+    if not openai_api_key:
+        logger.warning("OPENAI_API_KEY not found. Skipping Jira blocked issue followup reminder task.")
+        return "Jira blocked issue followup reminder task skipped (no OpenAI API key)"
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=openai_api_key)
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    reminder_marker = "<!-- AUTO_GENERATED_JIRA_BLOCKED_FOLLOWUP_REMINDER -->"
+
+    for project_key in tracked_projects:
+        jql = f'project = "{project_key}" AND status = "Blocked" AND updated <= -5d AND assignee is not EMPTY'
+        issues = jira_client.search_issues(jql)
+        logger.info(f"Found {len(issues)} blocked issues inactive for 5 days in project {project_key}")
+
+        for issue in issues:
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+
+                if not already_reminded:
+                    assignee_id = getattr(issue.fields.assignee, "accountId", None)
+                    assignee_mention = f"[~accountId:{assignee_id}]" if assignee_id else "Исполнитель"
+
+                    prompt = (
+                        "Вы — автоматический помощник. "
+                        f"Напишите короткое сообщение для задачи Jira ({issue.key}), "
+                        "которая находится в статусе Blocked более 5 дней. "
+                        "Задача имеет исполнителя. Попросите исполнителя актуализировать статус задачи, "
+                        "узнать, требуется ли помощь, и написать апдейт. "
+                        "Сообщение должно быть на русском языке. "
+                        f"Используйте это обращение к исполнителю: {assignee_mention}"
+                    )
+
+                    response = await llm.ainvoke([HumanMessage(content=prompt)])
+                    comment_body = f"{response.content}\n\n{reminder_marker}"
+                    jira_client.add_comment(issue.key, comment_body)
+                    logger.info(f"Posted blocked issue followup reminder on issue {issue.key}.")
+            except Exception as e:
+                logger.error(f"Error processing blocked issue followup reminder for issue {issue.key}: {e}")
+
 async def jira_blocked_task_alert_task():
     """
     Checks Jira tasks in active sprints that have been in 'Blocked' status for more than 2 days,
