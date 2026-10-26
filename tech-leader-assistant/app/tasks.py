@@ -6790,3 +6790,52 @@ async def jira_story_missing_description_warning_task():
             logger.error(f"Error checking story description for project {j_proj}: {e}")
 
     return f"Jira story missing description warning task completed. Warned {warned_count} stories."
+
+
+async def gitlab_mr_missing_labels_warning_task():
+    """
+    Phase 90: GitLab MR Missing Labels Warning
+    Iterates through open Merge Requests in tracked projects and warns if labels are missing.
+    """
+    import logging
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running GitLab MR missing labels warning task.")
+
+    gitlab_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_GITLAB_MR_MISSING_LABELS_WARNING -->"
+    warned_count = 0
+
+    for gl_proj in tracked_projects:
+        try:
+            project = gitlab_client.client.projects.get(gl_proj)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+
+            for mr in mrs:
+                labels = getattr(mr, "labels", None)
+                if not labels:
+                    notes = mr.notes.list(get_all=True)
+                    already_warned = any(marker in getattr(n, "body", "") for n in notes)
+
+                    if not already_warned:
+                        message_body = (
+                            f"{marker}\n"
+                            f"⚠️ **Missing Labels Warning**\n\n"
+                            f"This Merge Request does not have any labels. Please add labels to categorize it appropriately."
+                        )
+                        try:
+                            gitlab_client.create_mr_note(gl_proj, mr.iid, message_body)
+                            logger.info(f"Posted missing labels warning on MR !{mr.iid} in project {gl_proj}.")
+                            warned_count += 1
+                        except Exception as e:
+                            logger.error(f"Error posting missing labels warning on MR !{mr.iid} in {gl_proj}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing missing labels warning for project {gl_proj}: {e}")
+
+    return f"GitLab MR missing labels warning task completed: warned {warned_count} MRs."
