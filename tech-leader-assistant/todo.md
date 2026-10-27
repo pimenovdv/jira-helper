@@ -20,6 +20,6 @@
 - [x] Add tests to verify the behavior.
 
 ### Phase 91: Jira Epic Missing Description Warning
-- [ ] Create `jira_epic_missing_description_warning_task` to check active Jira Epic issues to ensure they have a description. If an Epic lacks a description, a bot comment is added.
-- [ ] Schedule the task to run periodically in `app/scheduler.py`.
-- [ ] Add tests to verify the behavior.
+- [x] Create `jira_epic_missing_description_warning_task` to check active Jira Epic issues to ensure they have a description. If an Epic lacks a description, a bot comment is added.
+- [x] Schedule the task to run periodically in `app/scheduler.py`.
+- [x] Add tests to verify the behavior.
