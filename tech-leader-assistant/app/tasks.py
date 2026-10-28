@@ -6886,3 +6886,66 @@ async def jira_epic_missing_description_warning_task():
             logger.error(f"Error checking epic description for project {j_proj}: {e}")
 
     return f"Jira epic missing description warning task completed. Warned {warned_count} epics."
+
+
+async def gitlab_mr_large_diff_warning_task():
+    """
+    Checks open Merge Requests in GitLab to warn if the changes exceed a certain threshold of added/removed lines.
+    If churn > 500 lines, a bot comment is added.
+    """
+    import logging
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running GitLab MR large diff warning task.")
+
+    gl_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_GITLAB_MR_LARGE_DIFF_WARNING -->"
+    warned_count = 0
+    CHURN_THRESHOLD = 500
+
+    for gl_proj in tracked_projects:
+        try:
+            mrs = gl_client.get_project_merge_requests(gl_proj, state='opened')
+            for mr in mrs:
+                try:
+                    # To calculate churn, we need the specific MR object to call .changes()
+                    project = gl_client.get_project(gl_proj)
+                    if not project:
+                        continue
+                    mr_obj = project.mergerequests.get(mr.iid)
+                    changes_data = mr_obj.changes()
+                    changes = changes_data.get('changes', [])
+
+                    churn = 0
+                    for change in changes:
+                        diff = change.get('diff', '')
+                        for line in diff.split('\n'):
+                            if (line.startswith('+') and not line.startswith('+++')) or \
+                               (line.startswith('-') and not line.startswith('---')):
+                                churn += 1
+
+                    if churn > CHURN_THRESHOLD:
+                        notes = mr_obj.notes.list(get_all=True)
+                        already_warned = any(marker in note.body for note in notes)
+
+                        if not already_warned:
+                            logger.info(f"MR !{mr.iid} in {gl_proj} has large diff ({churn} lines), adding warning.")
+                            message = (
+                                f"{marker}\n"
+                                f"⚠️ **Warning**: This Merge Request has a very large diff ({churn} lines changed).\n"
+                                f"Consider breaking it down into smaller, more manageable Merge Requests to make reviewing easier and safer."
+                            )
+                            mr_obj.notes.create({'body': message})
+                            warned_count += 1
+                except Exception as e:
+                    logger.error(f"Error checking large diff on MR !{mr.iid} in {gl_proj}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error processing large diff warning for project {gl_proj}: {e}")
+
+    return f"GitLab MR large diff warning task completed: warned {warned_count} MRs."
