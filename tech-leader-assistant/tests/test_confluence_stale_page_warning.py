@@ -179,8 +179,9 @@ async def test_confluence_stale_page_warning_task_no_account_id(mocker):
     mock_confluence_client = mock_confluence_client_cls.return_value
 
     # Mock search results for two pages to cover start += limit
+    pages_batch_1 = [{"content": {"id": f"page_{i}"}} for i in range(100)]
     mock_confluence_client.search_cql.side_effect = [
-        {"results": [{"content": {"id": "12345"}}]},
+        {"results": pages_batch_1},
         {"results": []}
     ]
 
@@ -193,8 +194,5 @@ async def test_confluence_stale_page_warning_task_no_account_id(mocker):
 
     await confluence_stale_page_warning_task()
 
-    mock_client_client.add_comment.assert_called_once_with(
-        "12345",
-        "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->This page hasn't been updated in over a year. Please review if it is still relevant."
-    )
-    assert mock_confluence_client.search_cql.call_count == 1
+    assert mock_client_client.add_comment.call_count == 100
+    assert mock_confluence_client.search_cql.call_count == 2
