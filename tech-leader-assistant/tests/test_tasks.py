@@ -75,14 +75,7 @@ async def test_jira_sync_task(mocker):
     mock_neo4j = mock_neo4j_client_cls.return_value
 
     # Mock AsyncSessionLocal and database operations
-    mock_session = mocker.MagicMock()
-    mock_session.commit = mocker.AsyncMock()
-    mock_session.refresh = mocker.AsyncMock()
-    mock_session.execute = mocker.AsyncMock()
-    mock_session = mocker.MagicMock()
-    mock_session.commit = mocker.AsyncMock()
-    mock_session.refresh = mocker.AsyncMock()
-    mock_session.execute = mocker.AsyncMock()
+    mock_session = mocker.AsyncMock()
     mock_session.add = mocker.MagicMock()
     mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
     mock_session_cls.return_value.__aenter__.return_value = mock_session
@@ -170,7 +163,7 @@ async def test_confluence_auto_link_task(mocker):
     mock_confluence.client.get_all_pages_from_space.return_value = [mock_page_1, mock_page_2]
 
     # Mock DB
-    mock_session = mocker.MagicMock(); mock_session.commit = mocker.AsyncMock(); mock_session.refresh = mocker.AsyncMock(); mock_session.execute = mocker.AsyncMock()
+    mock_session = mocker.AsyncMock()
     mock_session.add = mocker.MagicMock()
     mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
     mock_session_cls.return_value.__aenter__.return_value = mock_session
@@ -423,7 +416,7 @@ async def test_jira_sync_task_ready_for_release(mocker):
     # Branch is merged
     mock_gl.is_branch_merged.return_value = True
 
-    mock_session = mocker.MagicMock(); mock_session.commit = mocker.AsyncMock(); mock_session.refresh = mocker.AsyncMock(); mock_session.execute = mocker.AsyncMock()
+    mock_session = mocker.AsyncMock()
     mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
     mock_session_cls.return_value.__aenter__.return_value = mock_session
 
@@ -473,7 +466,7 @@ async def test_jira_sync_task_unmerged_feature(mocker):
     # Branch is unmerged
     mock_gl.is_branch_merged.return_value = False
 
-    mock_session = mocker.MagicMock(); mock_session.commit = mocker.AsyncMock(); mock_session.refresh = mocker.AsyncMock(); mock_session.execute = mocker.AsyncMock()
+    mock_session = mocker.AsyncMock()
     mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
     mock_session_cls.return_value.__aenter__.return_value = mock_session
 
@@ -529,7 +522,7 @@ async def test_gitlab_sync_task_existing_project_event(mocker):
 
     mock_gl.get_project_events.return_value = [mock_event]
 
-    mock_session = mocker.MagicMock(); mock_session.commit = mocker.AsyncMock(); mock_session.refresh = mocker.AsyncMock(); mock_session.execute = mocker.AsyncMock()
+    mock_session = mocker.AsyncMock()
     mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
     mock_session_cls.return_value.__aenter__.return_value = mock_session
 
@@ -557,7 +550,7 @@ async def test_gitlab_sync_task_existing_user_event(mocker):
     mock_gl.get_user_events.return_value = [mock_event]
     mock_gl.get_project_events.return_value = []
 
-    mock_session = mocker.MagicMock(); mock_session.commit = mocker.AsyncMock(); mock_session.refresh = mocker.AsyncMock(); mock_session.execute = mocker.AsyncMock()
+    mock_session = mocker.AsyncMock()
     mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
     mock_session_cls.return_value.__aenter__.return_value = mock_session
 
@@ -593,7 +586,7 @@ async def test_jira_sync_task_existing_release_event_no_change(mocker):
 
     mock_gl.get_project_branches.return_value = []
 
-    mock_session = mocker.MagicMock(); mock_session.commit = mocker.AsyncMock(); mock_session.refresh = mocker.AsyncMock(); mock_session.execute = mocker.AsyncMock()
+    mock_session = mocker.AsyncMock()
     mock_session_cls = mocker.patch('app.tasks.AsyncSessionLocal')
     mock_session_cls.return_value.__aenter__.return_value = mock_session
 
