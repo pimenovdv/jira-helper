@@ -21,8 +21,8 @@ class ConfluenceClient(BaseClient):
         except Exception as e:
             return {"status": "error", "service": "Confluence", "url": self.url, "error": str(e)}
 
-    def search_cql(self, cql: str, limit: int = 10):
+    def search_cql(self, cql: str, start: int = 0, limit: int = 10):
         try:
-            return self.client.cql(cql, limit=limit)
+            return self.client.cql(cql, start=start, limit=limit)
         except Exception as e:
             return {}

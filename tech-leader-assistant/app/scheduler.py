@@ -563,6 +563,16 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    from app.tasks import confluence_stale_page_warning_task
+    scheduler.add_job(
+        confluence_stale_page_warning_task,
+        "cron",
+        hour=15,
+        minute=0,
+        id="confluence_stale_page_warning_task",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
 
 

@@ -485,3 +485,24 @@ def test_opensearch_ping_exception_coverage(mocker):
     client = OpenSearchClient()
     result = client.ping()
     assert result["status"] == "error"
+
+def test_confluence_search_cql(mocker):
+    from app.clients.confluence_client import ConfluenceClient
+    mock_client = mocker.patch("app.clients.confluence_client.Confluence")
+    client_instance = mock_client.return_value
+    client_instance.cql.return_value = {"results": []}
+
+    client = ConfluenceClient()
+    result = client.search_cql('space="TEST"')
+    assert result == {"results": []}
+    client_instance.cql.assert_called_once_with('space="TEST"', start=0, limit=10)
+
+def test_confluence_search_cql_exception(mocker):
+    from app.clients.confluence_client import ConfluenceClient
+    mock_client = mocker.patch("app.clients.confluence_client.Confluence")
+    client_instance = mock_client.return_value
+    client_instance.cql.side_effect = Exception("CQL Error")
+
+    client = ConfluenceClient()
+    result = client.search_cql('space="TEST"')
+    assert result == {}
