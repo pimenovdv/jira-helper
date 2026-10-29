@@ -18,3 +18,13 @@
 - [x] Create `confluence_stale_page_warning_task` to check for pages in Confluence that haven't been updated in over 1 year and leave a comment asking if the content is still relevant.
 - [x] Add tests to verify behavior.
 - [x] Schedule the task to run periodically.
+
+### Phase 95: Jira Task Missing Assignee Warning
+- [ ] Create `jira_task_missing_assignee_warning_task` to warn in Jira if a task type issue has no assignee.
+- [ ] Add tests to verify behavior.
+- [ ] Schedule the task to run periodically.
+
+### Phase 96: GitLab MR Description Missing Links Warning
+- [ ] Create `gitlab_mr_missing_links_warning_task` to warn if MR description lacks HTTP links.
+- [ ] Add tests to verify behavior.
+- [ ] Schedule the task to run periodically.
