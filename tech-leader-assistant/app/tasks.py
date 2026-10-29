@@ -5475,7 +5475,6 @@ async def confluence_stale_page_warning_task():
             return
 
         client = ConfluenceClient()
-        warning_comment = "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->This page hasn't been updated in over a year. Please review if it is still relevant."
 
         for space in spaces:
             cql_query = f'space="{space}" and lastmodified < now("-52w")'
@@ -5492,6 +5491,15 @@ async def confluence_stale_page_warning_task():
 
                 for page in pages:
                     page_id = page["content"]["id"]
+
+                    # Fetch page details to get last updater
+                    page_details = client.client.get_page_by_id(page_id, expand='history.lastUpdated')
+                    account_id = page_details.get("history", {}).get("lastUpdated", {}).get("by", {}).get("accountId")
+
+                    if account_id:
+                        warning_comment = f"<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->[~accountid:{account_id}] This page hasn't been updated in over a year. Please review if it is still relevant."
+                    else:
+                        warning_comment = "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->This page hasn't been updated in over a year. Please review if it is still relevant."
 
                     comments_data = client.client.get_page_comments(page_id, expand='body.storage')
                     comments = comments_data.get('results', [])

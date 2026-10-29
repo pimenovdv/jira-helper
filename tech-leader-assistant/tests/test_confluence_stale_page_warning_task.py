@@ -30,6 +30,16 @@ async def test_confluence_stale_page_warning_task_adds_comment(mocker):
     mock_client_client = MagicMock()
     mock_confluence_client.client = mock_client_client
 
+    mock_client_client.get_page_by_id.return_value = {
+        "history": {
+            "lastUpdated": {
+                "by": {
+                    "accountId": "user123"
+                }
+            }
+        }
+    }
+
     # Mock page comments (no previous warning)
     mock_client_client.get_page_comments.return_value = {
         "results": [
@@ -49,7 +59,7 @@ async def test_confluence_stale_page_warning_task_adds_comment(mocker):
     mock_client_client.get_page_comments.assert_called_once_with("12345", expand='body.storage')
     mock_client_client.add_comment.assert_called_once_with(
         "12345",
-        "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->This page hasn't been updated in over a year. Please review if it is still relevant."
+        "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->[~accountid:user123] This page hasn't been updated in over a year. Please review if it is still relevant."
     )
 
 @pytest.mark.asyncio
@@ -70,13 +80,23 @@ async def test_confluence_stale_page_warning_task_already_warned(mocker):
     mock_client_client = MagicMock()
     mock_confluence_client.client = mock_client_client
 
+    mock_client_client.get_page_by_id.return_value = {
+        "history": {
+            "lastUpdated": {
+                "by": {
+                    "accountId": "user123"
+                }
+            }
+        }
+    }
+
     # Mock page comments (previous warning exists)
     mock_client_client.get_page_comments.return_value = {
         "results": [
             {
                 "body": {
                     "storage": {
-                        "value": "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->This page hasn't been updated in over a year. Please review if it is still relevant."
+                        "value": "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->[~accountid:user123] This page hasn't been updated in over a year. Please review if it is still relevant."
                     }
                 }
             }
@@ -123,6 +143,15 @@ async def test_confluence_stale_page_warning_task_add_comment_exception(mocker):
     mock_client_client = MagicMock()
     mock_confluence_client.client = mock_client_client
 
+    mock_client_client.get_page_by_id.return_value = {
+        "history": {
+            "lastUpdated": {
+                "by": {
+                    "accountId": "user123"
+                }
+            }
+        }
+    }
     mock_client_client.get_page_comments.return_value = {"results": []}
     mock_client_client.add_comment.side_effect = Exception("API Error")
 
@@ -140,3 +169,32 @@ async def test_confluence_stale_page_warning_task_top_level_exception(mocker):
     await confluence_stale_page_warning_task()
 
     mock_logger.error.assert_called_once_with("Error in confluence_stale_page_warning_task: Settings Error")
+
+@pytest.mark.asyncio
+async def test_confluence_stale_page_warning_task_no_account_id(mocker):
+    mock_settings = mocker.patch("app.tasks.settings")
+    mock_settings.get.return_value = "SPACE1"
+
+    mock_confluence_client_cls = mocker.patch("app.tasks.ConfluenceClient")
+    mock_confluence_client = mock_confluence_client_cls.return_value
+
+    # Mock search results for two pages to cover start += limit
+    mock_confluence_client.search_cql.side_effect = [
+        {"results": [{"content": {"id": "12345"}}]},
+        {"results": []}
+    ]
+
+    mock_client_client = MagicMock()
+    mock_confluence_client.client = mock_client_client
+
+    mock_client_client.get_page_by_id.return_value = {}
+
+    mock_client_client.get_page_comments.return_value = {"results": []}
+
+    await confluence_stale_page_warning_task()
+
+    mock_client_client.add_comment.assert_called_once_with(
+        "12345",
+        "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->This page hasn't been updated in over a year. Please review if it is still relevant."
+    )
+    assert mock_confluence_client.search_cql.call_count == 1
