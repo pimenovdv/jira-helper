@@ -86,3 +86,57 @@ async def test_confluence_stale_page_warning_task_already_warned(mocker):
     await confluence_stale_page_warning_task()
 
     mock_client_client.add_comment.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_confluence_stale_page_warning_task_pagination_empty(mocker):
+    mock_settings = mocker.patch("app.tasks.settings")
+    mock_settings.get.return_value = "SPACE1"
+
+    mock_confluence_client_cls = mocker.patch("app.tasks.ConfluenceClient")
+    mock_confluence_client = mock_confluence_client_cls.return_value
+
+    # Mock search results to be empty
+    mock_confluence_client.search_cql.return_value = {
+        "results": []
+    }
+
+    await confluence_stale_page_warning_task()
+
+    mock_confluence_client.search_cql.assert_called_once_with('space="SPACE1" and lastmodified < now("-52w")', start=0, limit=100)
+
+@pytest.mark.asyncio
+async def test_confluence_stale_page_warning_task_add_comment_exception(mocker):
+    mock_settings = mocker.patch("app.tasks.settings")
+    mock_settings.get.return_value = "SPACE1"
+    mock_logger = mocker.patch("app.tasks.logger")
+
+    mock_confluence_client_cls = mocker.patch("app.tasks.ConfluenceClient")
+    mock_confluence_client = mock_confluence_client_cls.return_value
+
+    # Mock search results
+    mock_confluence_client.search_cql.return_value = {
+        "results": [
+            {"content": {"id": "12345"}}
+        ]
+    }
+
+    mock_client_client = MagicMock()
+    mock_confluence_client.client = mock_client_client
+
+    mock_client_client.get_page_comments.return_value = {"results": []}
+    mock_client_client.add_comment.side_effect = Exception("API Error")
+
+    await confluence_stale_page_warning_task()
+
+    mock_client_client.add_comment.assert_called_once()
+    mock_logger.error.assert_any_call("Failed to add comment to page 12345: API Error")
+
+@pytest.mark.asyncio
+async def test_confluence_stale_page_warning_task_top_level_exception(mocker):
+    mock_settings = mocker.patch("app.tasks.settings")
+    mock_settings.get.side_effect = Exception("Settings Error")
+    mock_logger = mocker.patch("app.tasks.logger")
+
+    await confluence_stale_page_warning_task()
+
+    mock_logger.error.assert_called_once_with("Error in confluence_stale_page_warning_task: Settings Error")
