@@ -5506,8 +5506,8 @@ async def confluence_stale_page_warning_task():
                     warning_comment = (
                         f"<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->"
                         f"{'[~accountid:' + account_id + '] ' if account_id else ''}"
-                        "This page hasn't been updated in over a year. "
-                        "Please review if it is still relevant."
+                        "Эта страница не обновлялась больше года. "
+                        "Пожалуйста, проверьте, актуальна ли она."
                     )
 
                     comments_data = client.client.get_page_comments(page_id, expand='body.storage')
