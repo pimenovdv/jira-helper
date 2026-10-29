@@ -23,7 +23,7 @@ def test_health_check(mocker):
 
 @pytest.mark.asyncio
 async def test_override_confluence_link(mocker):
-    mock_db = mocker.AsyncMock()
+    mock_db = mocker.MagicMock(); db.commit = mocker.AsyncMock(); db.refresh = mocker.AsyncMock(); db.execute = mocker.AsyncMock()
     mock_result = mocker.MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
@@ -84,7 +84,7 @@ def test_chat_endpoint_empty_query():
 
 @pytest.mark.asyncio
 async def test_get_dashboard_tasks(mocker):
-    mock_db = mocker.AsyncMock()
+    mock_db = mocker.MagicMock(); db.commit = mocker.AsyncMock(); db.refresh = mocker.AsyncMock(); db.execute = mocker.AsyncMock()
     mock_result = mocker.MagicMock()
 
     class MockEvent:
@@ -127,7 +127,7 @@ async def test_get_dashboard_tasks(mocker):
 
 @pytest.mark.asyncio
 async def test_get_dashboard_releases(mocker):
-    mock_db = mocker.AsyncMock()
+    mock_db = mocker.MagicMock(); db.commit = mocker.AsyncMock(); db.refresh = mocker.AsyncMock(); db.execute = mocker.AsyncMock()
     mock_result = mocker.MagicMock()
 
     class MockEvent:
