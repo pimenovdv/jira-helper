@@ -5466,6 +5466,58 @@ async def gitlab_mr_missing_approvals_reminder_task():
     except Exception as e:
         logging.error(f"Error in gitlab_mr_missing_approvals_reminder_task: {e}")
 
+
+async def confluence_stale_page_warning_task():
+    try:
+        spaces = [s.strip() for s in settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",") if s.strip()]
+        if not spaces:
+            logger.warning("No Confluence spaces configured for tracking.")
+            return
+
+        client = ConfluenceClient()
+        warning_comment = "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->This page hasn't been updated in over a year. Please review if it is still relevant."
+
+        for space in spaces:
+            cql_query = f'space="{space}" and lastmodified < now("-52w")'
+
+            start = 0
+            limit = 100
+
+            while True:
+                results = client.search_cql(cql_query, start=start, limit=limit)
+                pages = results.get("results", [])
+
+                if not pages:
+                    break
+
+                for page in pages:
+                    page_id = page["content"]["id"]
+
+                    comments_data = client.client.get_page_comments(page_id, expand='body.storage')
+                    comments = comments_data.get('results', [])
+
+                    already_warned = False
+                    for comment in comments:
+                        comment_body = comment.get('body', {}).get('storage', {}).get('value', '')
+                        if "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->" in comment_body:
+                            already_warned = True
+                            break
+
+                    if not already_warned:
+                        try:
+                            client.client.add_comment(page_id, warning_comment)
+                            logger.info(f"Added stale page warning to Confluence page {page_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to add comment to page {page_id}: {e}")
+
+                if len(pages) < limit:
+                    break
+
+                start += limit
+
+    except Exception as e:
+        logger.error(f"Error in confluence_stale_page_warning_task: {e}")
+
 async def jira_stale_backlog_task_reminder_task():
     """
     Checks issues in 'Backlog' or 'To Do' state that have been untouched for more than 90 days.
