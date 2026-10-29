@@ -59,7 +59,9 @@ async def test_confluence_stale_page_warning_task_adds_comment(mocker):
     mock_client_client.get_page_comments.assert_called_once_with("12345", expand='body.storage')
     mock_client_client.add_comment.assert_called_once_with(
         "12345",
-        "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->[~accountid:user123] This page hasn't been updated in over a year. Please review if it is still relevant."
+        ("<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->"
+        "[~accountid:user123] This page hasn't been updated in over a year. "
+        "Please review if it is still relevant.")
     )
 
 @pytest.mark.asyncio
@@ -96,7 +98,9 @@ async def test_confluence_stale_page_warning_task_already_warned(mocker):
             {
                 "body": {
                     "storage": {
-                        "value": "<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->[~accountid:user123] This page hasn't been updated in over a year. Please review if it is still relevant."
+                        "value": ("<!-- AUTO_GENERATED_CONFLUENCE_STALE_PAGE_WARNING -->"
+        "[~accountid:user123] This page hasn't been updated in over a year. "
+        "Please review if it is still relevant.")
                     }
                 }
             }
