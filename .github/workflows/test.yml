@@ -28,4 +28,4 @@ jobs:
 
     - name: Run tests with pytest
       run: |
-        cd tech-leader-assistant && uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=80 tests/
+        cd tech-leader-assistant && PLAYWRIGHT_BROWSERS_PATH=0 uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=80 tests/
