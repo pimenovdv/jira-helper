@@ -563,12 +563,22 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    from app.tasks import jira_story_missing_story_points_warning_task
+    scheduler.add_job(
+        jira_story_missing_story_points_warning_task,
+        "cron",
+        hour=10,
+        minute=25,
+        id="jira_story_missing_story_points_warning_task",
+        replace_existing=True,
+    )
+
     from app.tasks import gitlab_mr_missing_jira_link_warning_task
     scheduler.add_job(
         gitlab_mr_missing_jira_link_warning_task,
         "cron",
-        hour="*/3",
-        minute=0,
+        hour=10,
+        minute=30,
         id="gitlab_mr_missing_jira_link_warning_task",
         replace_existing=True,
     )
