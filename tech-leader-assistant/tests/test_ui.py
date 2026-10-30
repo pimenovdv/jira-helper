@@ -2,19 +2,28 @@ import pytest
 from playwright.async_api import async_playwright
 import uvicorn
 import asyncio
-from app.main import app
 import multiprocessing
 import time
 import requests
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
-async def dummy_lifespan(app):
+async def dummy_lifespan(app_obj):
     yield
 
 def run_server():
+    from app.main import app
+
     # Replace lifespan to avoid DB connection errors during test
     app.router.lifespan_context = dummy_lifespan
+
+    # Mutate the routes directly to mock the health endpoint before starting server
+    for route in app.router.routes:
+        if getattr(route, "path", None) == "/api/health":
+            async def mock_health():
+                return {"status": "active", "clients": []}
+            route.endpoint = mock_health
+
     uvicorn.run(app, host="127.0.0.1", port=8001, log_level="error")
 
 @pytest.fixture(scope="module", autouse=True)
@@ -23,7 +32,7 @@ def test_server():
     process.start()
 
     # Wait for server to start
-    for _ in range(30):
+    for _ in range(100):
         try:
             requests.get("http://127.0.0.1:8001/api/health")
             break
