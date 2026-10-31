@@ -6949,3 +6949,106 @@ async def gitlab_mr_large_diff_warning_task():
             logger.error(f"Error processing large diff warning for project {gl_proj}: {e}")
 
     return f"GitLab MR large diff warning task completed: warned {warned_count} MRs."
+
+
+async def jira_subtask_missing_description_warning_task():
+    """
+    Checks active Jira Sub-task issues to ensure they have a description.
+    If a Sub-task lacks a description, a bot comment is added.
+    """
+    import logging
+    from app.clients.jira_client import JiraClient
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira subtask missing description warning task.")
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_SUBTASK_MISSING_DESCRIPTION_WARNING -->"
+    warned_count = 0
+
+    for j_proj in tracked_projects:
+        try:
+            # Active subtasks: not done, type Sub-task
+            jql = f'project = "{j_proj}" AND issuetype = "Sub-task" AND statusCategory != Done'
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                description = getattr(issue.fields, "description", None)
+
+                # Check if description is missing or completely empty
+                if not description or not description.strip():
+                    comments = jira_client.get_comments(issue.key)
+                    already_warned = any(marker in getattr(c, "body", "") for c in comments)
+
+                    if not already_warned:
+                        message = (
+                            f"{marker}\n"
+                            f"⚠️ **Warning**: This Sub-task is missing a description.\n"
+                            f"Please provide a clear and detailed description so the assignee understands the specific requirements of this task."
+                        )
+                        jira_client.add_comment(issue.key, message)
+                        logger.info(f"Added missing description warning to {issue.key}")
+                        warned_count += 1
+
+        except Exception as e:
+            logger.error(f"Error checking subtask description for project {j_proj}: {e}")
+
+    return f"Jira subtask missing description warning task completed. Warned {warned_count} subtasks."
+
+
+async def gitlab_mr_missing_jira_key_warning_task():
+    """
+    Phase 95: Checks open GitLab MRs to ensure their title contains a Jira issue key.
+    If missing, it adds an automated warning comment with a hidden marker.
+    """
+    import re
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running GitLab MR missing Jira key warning task.")
+    gl_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_GITLAB_MR_MISSING_JIRA_KEY_WARNING -->"
+    jira_key_regex = re.compile(r'[A-Z][A-Z0-9]+-\d+')
+
+    warned_count = 0
+
+    for gl_proj in tracked_projects:
+        gl_proj = gl_proj.strip()
+        if not gl_proj:
+            continue
+
+        try:
+            mrs = gl_client.get_project_merge_requests(gl_proj, state='opened')
+            for mr in mrs:
+                title = getattr(mr, "title", "")
+                if jira_key_regex.search(title):
+                    continue
+
+                try:
+                    # Need the specific MR object to list notes
+                    # Use get_project rather than client.projects.get since the wrapper handles it
+                    mr_obj = gl_client.client.projects.get(gl_proj).mergerequests.get(mr.iid)
+                    notes = mr_obj.notes.list(get_all=True)
+
+                    already_warned = any(marker in getattr(n, "body", "") for n in notes)
+
+                    if not already_warned:
+                        message = (
+                            f"{marker}\n"
+                            f"Привет! Пожалуйста, добавь ключ задачи Jira (например, PROJ-123) в заголовок этого Merge Request."
+                        )
+                        mr_obj.notes.create({'body': message})
+                        logger.info(f"Posted missing Jira key warning on MR !{mr.iid} in project {gl_proj}.")
+                        warned_count += 1
+                except Exception as e:
+                    logger.error(f"Error checking notes/posting missing Jira key warning on MR !{mr.iid} in {gl_proj}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to check missing Jira key for MRs in project {gl_proj}: {e}")
+
+    return f"GitLab MR missing Jira key warning task completed: warned {warned_count} MRs."
