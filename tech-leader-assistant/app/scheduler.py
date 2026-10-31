@@ -573,6 +573,16 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    from app.tasks import gitlab_mr_missing_jira_key_warning_task
+    scheduler.add_job(
+        gitlab_mr_missing_jira_key_warning_task,
+        "cron",
+        hour="*/4",
+        minute=0,
+        id="gitlab_mr_missing_jira_key_warning_task",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
 
 

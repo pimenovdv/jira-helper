@@ -6996,3 +6996,59 @@ async def jira_subtask_missing_description_warning_task():
             logger.error(f"Error checking subtask description for project {j_proj}: {e}")
 
     return f"Jira subtask missing description warning task completed. Warned {warned_count} subtasks."
+
+
+async def gitlab_mr_missing_jira_key_warning_task():
+    """
+    Phase 95: Checks open GitLab MRs to ensure their title contains a Jira issue key.
+    If missing, it adds an automated warning comment with a hidden marker.
+    """
+    import re
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running GitLab MR missing Jira key warning task.")
+    gl_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_GITLAB_MR_MISSING_JIRA_KEY_WARNING -->"
+    jira_key_regex = re.compile(r'[A-Z][A-Z0-9]+-\d+')
+
+    warned_count = 0
+
+    for gl_proj in tracked_projects:
+        gl_proj = gl_proj.strip()
+        if not gl_proj:
+            continue
+
+        try:
+            mrs = gl_client.get_project_merge_requests(gl_proj, state='opened')
+            for mr in mrs:
+                title = getattr(mr, "title", "")
+                if jira_key_regex.search(title):
+                    continue
+
+                try:
+                    # Need the specific MR object to list notes
+                    # Use get_project rather than client.projects.get since the wrapper handles it
+                    mr_obj = gl_client.client.projects.get(gl_proj).mergerequests.get(mr.iid)
+                    notes = mr_obj.notes.list(get_all=True)
+
+                    already_warned = any(marker in getattr(n, "body", "") for n in notes)
+
+                    if not already_warned:
+                        message = (
+                            f"{marker}\n"
+                            f"Привет! Пожалуйста, добавь ключ задачи Jira (например, PROJ-123) в заголовок этого Merge Request."
+                        )
+                        mr_obj.notes.create({'body': message})
+                        logger.info(f"Posted missing Jira key warning on MR !{mr.iid} in project {gl_proj}.")
+                        warned_count += 1
+                except Exception as e:
+                    logger.error(f"Error checking notes/posting missing Jira key warning on MR !{mr.iid} in {gl_proj}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to check missing Jira key for MRs in project {gl_proj}: {e}")
+
+    return f"GitLab MR missing Jira key warning task completed: warned {warned_count} MRs."
