@@ -6949,3 +6949,115 @@ async def gitlab_mr_large_diff_warning_task():
             logger.error(f"Error processing large diff warning for project {gl_proj}: {e}")
 
     return f"GitLab MR large diff warning task completed: warned {warned_count} MRs."
+
+async def jira_story_missing_story_points_warning_task():
+    """
+    Finds open Stories in Jira that lack story points (customfield_10016).
+    Adds a comment warning that stories should be estimated.
+    """
+    logger.info("Running Jira story missing story points warning task.")
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_JIRA_STORY_MISSING_STORY_POINTS_WARNING -->"
+    warned_count = 0
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND issuetype = "Story" AND statusCategory != Done'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {j_proj}: {e}")
+            continue
+
+        for issue in issues:
+            story_points = getattr(issue.fields, "customfield_10016", None)
+
+            if story_points is not None:
+                continue
+
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_warned = any(marker in (c.body or "") for c in comments)
+
+                if not already_warned:
+                    warning_msg = (
+                        "Warning: This Story is missing an estimate in story points. "
+                        "Please estimate the story points to track team capacity.\n\n"
+                        f"{marker}"
+                    )
+                    jira_client.add_comment(issue.key, warning_msg)
+                    warned_count += 1
+                    logger.info(f"Added missing story points warning to {issue.key}")
+
+            except Exception as e:
+                logger.error(f"Error processing issue {issue.key}: {e}")
+
+    return f"Jira story missing story points warning task completed: warned {warned_count} stories."
+
+async def gitlab_mr_missing_jira_link_warning_task():
+    """
+    Finds open MRs in GitLab that do not have a Jira issue key in title or description.
+    Adds a comment warning that a Jira link is required.
+    """
+    import re
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running GitLab MR missing Jira link warning task.")
+
+    gitlab_client = GitLabClient()
+    gl = gitlab_client.client
+    gl_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_GITLAB_MR_MISSING_JIRA_LINK_WARNING -->"
+    warned_count = 0
+    jira_regex = re.compile(r"[A-Z0-9]+-[0-9]+")
+
+    for gl_proj in gl_projects:
+        gl_proj = gl_proj.strip()
+        if not gl_proj:
+            continue
+
+        try:
+            project = gl.projects.get(gl_proj)
+            mrs = project.mergerequests.list(state="opened", get_all=True)
+
+            for mr in mrs:
+                title_has_jira = bool(jira_regex.search(mr.title or ""))
+                desc_has_jira = bool(jira_regex.search(mr.description or ""))
+
+                if title_has_jira or desc_has_jira:
+                    continue
+
+                discussions = mr.discussions.list(get_all=True)
+                already_warned = False
+                for discussion in discussions:
+                    for note in discussion.attributes.get('notes', []):
+                        if marker in note.get('body', ''):
+                            already_warned = True
+                            break
+                    if already_warned:
+                        break
+
+                if not already_warned:
+                    warning_msg = (
+                        "Warning: This Merge Request seems to be missing a Jira issue key in the title or description. "
+                        "Please include the relevant Jira key.\n\n"
+                        f"{marker}"
+                    )
+                    mr.notes.create({'body': warning_msg})
+                    warned_count += 1
+                    logger.info(f"Added missing Jira link warning to MR {mr.iid} in project {gl_proj}")
+
+        except Exception as e:
+            logger.error(f"Error processing missing Jira link warning for project {gl_proj}: {e}")
+
+    return f"GitLab MR missing Jira link warning task completed: warned {warned_count} MRs."
