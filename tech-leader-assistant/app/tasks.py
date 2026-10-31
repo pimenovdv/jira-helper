@@ -7061,3 +7061,45 @@ async def gitlab_mr_missing_jira_link_warning_task():
             logger.error(f"Error processing missing Jira link warning for project {gl_proj}: {e}")
 
     return f"GitLab MR missing Jira link warning task completed: warned {warned_count} MRs."
+
+async def gitlab_mr_description_length_warning_task():
+    """
+    Finds open GitLab Merge Requests with descriptions that are too short (< 20 characters).
+    Adds a comment warning that the MR description should be more detailed.
+    """
+    logger.info("Running GitLab MR description length warning task.")
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+
+    gl_client = GitLabClient()
+    gl_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_GITLAB_MR_DESCRIPTION_LENGTH_WARNING -->"
+    warned_count = 0
+
+    for gl_proj in gl_projects:
+        gl_proj = gl_proj.strip()
+        if not gl_proj:
+            continue
+        try:
+            mrs = gl_client.get_merge_requests(gl_proj, state="opened")
+            for mr in mrs:
+                description = mr.description or ""
+                if len(description) >= 20:
+                    continue
+
+                notes = mr.notes.list(get_all=True)
+                already_warned = any(marker in (n.body or "") for n in notes)
+
+                if not already_warned:
+                    warning_msg = (
+                        "Warning: This Merge Request description is very short. "
+                        "Please provide more context or details to help reviewers understand the changes.\n\n"
+                        f"{marker}"
+                    )
+                    mr.notes.create({"body": warning_msg})
+                    warned_count += 1
+                    logger.info(f"Added MR description length warning to MR {mr.iid} in {gl_proj}")
+        except Exception as e:
+            logger.error(f"Error processing MRs for GitLab project {gl_proj}: {e}")
+
+    return f"GitLab MR description length warning task completed: warned {warned_count} MRs."
