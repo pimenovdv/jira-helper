@@ -27,6 +27,8 @@ def run_server():
 
 @pytest.fixture(scope="module", autouse=True)
 def test_server():
+
+
     process = multiprocessing.Process(target=run_server)
     process.start()
 
