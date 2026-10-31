@@ -96,10 +96,3 @@ async def test_jira_sync_task_coverage(mocker):
         await jira_sync_task()
     except Exception as e:
         pass
-
-@pytest.mark.asyncio
-async def test_gitlab_mr_description_length_warning_task_coverage(mocker):
-    from app.tasks import gitlab_mr_description_length_warning_task
-    mocker.patch("app.tasks.settings.get", side_effect=lambda k, d="": "" if "GITLAB" in k else d)
-    res = await gitlab_mr_description_length_warning_task()
-    assert res == "GitLab MR description length warning task completed: warned 0 MRs."

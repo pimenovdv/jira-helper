@@ -574,23 +574,12 @@ def setup_scheduler():
     )
 
     from app.tasks import gitlab_mr_missing_jira_link_warning_task
-    from app.tasks import gitlab_mr_description_length_warning_task
     scheduler.add_job(
         gitlab_mr_missing_jira_link_warning_task,
         "cron",
         hour=10,
         minute=30,
         id="gitlab_mr_missing_jira_link_warning_task",
-        replace_existing=True,
-    )
-
-
-    scheduler.add_job(
-        gitlab_mr_description_length_warning_task,
-        "cron",
-        hour=10,
-        minute=35,
-        id="gitlab_mr_description_length_warning_task",
         replace_existing=True,
     )
 
