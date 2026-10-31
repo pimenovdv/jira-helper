@@ -72,3 +72,24 @@ async def test_jira_story_missing_story_points_warning_task_already_commented(mo
     await jira_story_missing_story_points_warning_task()
 
     mock_jira.add_comment.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_jira_story_missing_story_points_warning_task_zero_points(mock_jira_client, mock_settings):
+    mock_settings.get.return_value = "PROJ1"
+
+    mock_jira = MagicMock()
+    mock_jira_client.return_value = mock_jira
+
+    mock_issue = MagicMock()
+    mock_issue.key = "PROJ1-123"
+    mock_issue.fields.customfield_10016 = 0.0
+
+    mock_jira.search_issues.return_value = [mock_issue]
+
+    mock_comment = MagicMock()
+    mock_comment.body = "Some regular comment."
+    mock_jira.get_comments.return_value = [mock_comment]
+
+    await jira_story_missing_story_points_warning_task()
+
+    mock_jira.add_comment.assert_called_once()
