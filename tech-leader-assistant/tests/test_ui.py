@@ -13,18 +13,17 @@ async def dummy_lifespan(app_obj):
 
 def run_server():
     from app.main import app
+    import unittest.mock
 
     # Replace lifespan to avoid DB connection errors during test
     app.router.lifespan_context = dummy_lifespan
 
-    # Mutate the routes directly to mock the health endpoint before starting server
-    for route in app.router.routes:
-        if getattr(route, "path", None) == "/api/health":
-            async def mock_health():
-                return {"status": "active", "clients": []}
-            route.endpoint = mock_health
-
-    uvicorn.run(app, host="127.0.0.1", port=8001, log_level="error")
+    with unittest.mock.patch('app.main.GitLabClient'), \
+         unittest.mock.patch('app.main.JiraClient'), \
+         unittest.mock.patch('app.main.ConfluenceClient'), \
+         unittest.mock.patch('app.main.Neo4jClient'), \
+         unittest.mock.patch('app.main.OpenSearchClient'):
+        uvicorn.run(app, host="127.0.0.1", port=8001, log_level="error")
 
 @pytest.fixture(scope="module", autouse=True)
 def test_server():
