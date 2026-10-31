@@ -563,6 +563,16 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    from app.tasks import jira_subtask_missing_description_warning_task
+    scheduler.add_job(
+        jira_subtask_missing_description_warning_task,
+        "cron",
+        hour="*/6",
+        minute=0,
+        id="jira_subtask_missing_description_warning_task",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
 
 
