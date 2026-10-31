@@ -6979,7 +6979,7 @@ async def jira_story_missing_story_points_warning_task():
         for issue in issues:
             story_points = getattr(issue.fields, "customfield_10016", None)
 
-            if story_points is not None:
+            if story_points:
                 continue
 
             try:
