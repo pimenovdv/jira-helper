@@ -6,7 +6,6 @@ from .clients import settings
 
 from pydantic import BaseModel
 from fastapi import HTTPException
-from datetime import datetime
 
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -242,7 +241,7 @@ def get_stale_branches():
                                     "commit_date": commit_date_str
                                 })
                                 break # match found, no need to check other issues
-            except Exception as e:
+            except Exception:
                 continue
 
     return {"stale_branches": stale_branches}

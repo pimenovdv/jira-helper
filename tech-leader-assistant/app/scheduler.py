@@ -573,7 +573,79 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    from app.tasks import jira_subtask_missing_description_warning_task
+    scheduler.add_job(
+        jira_subtask_missing_description_warning_task,
+        "cron",
+        hour="*/6",
+        minute=0,
+        id="jira_subtask_missing_description_warning_task",
+        replace_existing=True,
+    )
+
+    from app.tasks import gitlab_mr_missing_jira_key_warning_task
+    scheduler.add_job(
+        gitlab_mr_missing_jira_key_warning_task,
+        "cron",
+        hour="*/4",
+        minute=0,
+        id="gitlab_mr_missing_jira_key_warning_task",
+        replace_existing=True,
+    )
+
+
+    from app.tasks import confluence_missing_last_review_date_warning_task
+    scheduler.add_job(
+        confluence_missing_last_review_date_warning_task,
+        "cron",
+        hour=13,
+        minute=0,
+        id="confluence_missing_last_review_date_warning_task",
+        replace_existing=True,
+    )
+
+    from app.tasks import gitlab_mr_missing_target_branch_validator_task
+    scheduler.add_job(
+        gitlab_mr_missing_target_branch_validator_task,
+        "cron",
+        hour="*/4",
+        minute=0,
+        id="gitlab_mr_missing_target_branch_validator_task",
+        replace_existing=True,
+    )
+
+    from app.tasks import jira_epic_missing_priority_warning_task
+    scheduler.add_job(
+        jira_epic_missing_priority_warning_task,
+        "cron",
+        hour=10,
+        minute=30,
+        id="jira_epic_missing_priority_warning_task",
+        replace_existing=True,
+    )
+
+    from app.tasks import confluence_outdated_architecture_diagram_warning_task
+    scheduler.add_job(
+        confluence_outdated_architecture_diagram_warning_task,
+        "cron",
+        hour=11,
+        minute=0,
+        id="confluence_outdated_architecture_diagram_warning_task",
+        replace_existing=True,
+    )
+
+    from app.tasks import jira_sprint_goal_missing_warning_task
+    scheduler.add_job(
+        jira_sprint_goal_missing_warning_task,
+        "cron",
+        hour="*/12",
+        minute=0,
+        id="jira_sprint_goal_missing_warning_task",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
+
 
 
 def start_scheduler():

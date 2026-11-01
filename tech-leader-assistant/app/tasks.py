@@ -1522,7 +1522,7 @@ async def jira_missing_acceptance_criteria_reminder_task():
                 comments_obj = jira_client.get_comments(issue.key)
                 # Jira API might return a dict or object depending on implementation, jira package returns object with comments list
                 # Actually, jira_client.get_comments returns list of comment objects
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments_obj)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments_obj)
 
                 if already_reminded:
                     continue
@@ -1644,7 +1644,7 @@ async def jira_overdue_task_reminder_task():
 
                 if due_date < now:
                     comments = jira_client.get_comments(issue.key)
-                    already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                    already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_reminded:
                         message = (
@@ -1773,7 +1773,7 @@ async def jira_missing_description_reminder_task():
                 # Check if description is missing or very short
                 if not description or len(description.strip()) < 20:
                     comments = jira_client.get_comments(issue.key)
-                    already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                    already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_reminded:
                         prompt = (
@@ -1965,7 +1965,7 @@ async def jira_sprint_unassigned_task_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -2089,7 +2089,7 @@ async def jira_missing_component_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -2141,7 +2141,7 @@ async def jira_missing_fixversion_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -2266,7 +2266,7 @@ async def jira_inactive_reporter_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     reporter_name = getattr(issue.fields.reporter, "displayName", "Reporter") if hasattr(issue.fields, "reporter") and issue.fields.reporter else "Reporter"
@@ -2321,7 +2321,7 @@ async def jira_blocked_issue_followup_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     assignee_id = getattr(issue.fields.assignee, "accountId", None)
@@ -2376,7 +2376,7 @@ async def jira_blocked_task_alert_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -2541,7 +2541,7 @@ async def jira_missing_epic_reminder_task():
                         continue
 
                     comments = jira_client.get_issue_comments(issue_key)
-                    already_reminded = any(reminder_marker in c.get("body", "") for c in comments)
+                    already_reminded = any((reminder_marker in c.get("body", "") or reminder_marker in BeautifulSoup(c.get("body", ""), "html.parser").get_text()) for c in comments)
 
                     if already_reminded:
                         continue
@@ -2622,7 +2622,7 @@ async def jira_high_complexity_warning_task():
                         continue
 
                     comments = jira_client.get_issue_comments(issue_key)
-                    already_reminded = any(reminder_marker in c.get("body", "") for c in comments)
+                    already_reminded = any((reminder_marker in c.get("body", "") or reminder_marker in BeautifulSoup(c.get("body", ""), "html.parser").get_text()) for c in comments)
 
                     if already_reminded:
                         continue
@@ -2742,7 +2742,7 @@ async def jira_missing_labels_reminder_task():
                     continue
 
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if already_reminded:
                     continue
@@ -2932,7 +2932,7 @@ async def jira_large_story_decomposition_reminder_task():
                     continue
 
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if already_reminded:
                     continue
@@ -2994,7 +2994,7 @@ async def jira_high_priority_out_of_sprint_reminder_task():
 
             for issue in issues:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
                 if already_reminded:
                     continue
 
@@ -3178,7 +3178,7 @@ async def jira_stale_epic_reminder_task():
 
             for issue in issues:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
                 if already_reminded:
                     continue
 
@@ -3675,7 +3675,7 @@ async def jira_stale_in_progress_reminder_task():
             for issue in issues:
                 comments = jira_client.get_comments(issue.key)
                 already_reminded = any(
-                    reminder_marker in (c.body or "") for c in comments
+                    (reminder_marker in (c.body or "") or reminder_marker in BeautifulSoup((c.body or ""), "html.parser").get_text()) for c in comments
                 )
                 if already_reminded:
                     logger.info(f"Already sent stale 'In Progress' reminder for Jira task {issue.key}.")
@@ -4191,7 +4191,7 @@ async def jira_missing_priority_reminder_task():
                     continue
 
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -4255,7 +4255,7 @@ async def jira_closed_missing_resolution_task():
                 try:
                     comments = jira_client.get_comments(issue.key)
                     for comment in comments:
-                        if hasattr(comment, "body") and reminder_marker in comment.body:
+                        if hasattr(comment, "body") and (reminder_marker in comment.body or reminder_marker in BeautifulSoup(comment.body, "html.parser").get_text()):
                             has_bot_comment = True
                             break
                 except Exception as e:
@@ -4318,7 +4318,7 @@ async def jira_missing_due_date_reminder_task():
                     continue
 
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(reminder_marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if already_reminded:
                     logger.info(f"Skipping {issue.key}, due date reminder already sent.")
@@ -4413,7 +4413,6 @@ async def gitlab_mr_stale_approval_reminder_task():
     """
     import logging
     from datetime import datetime, timezone
-    import dateutil.parser
     from langchain_core.messages import HumanMessage, SystemMessage
     # Use global imports so mocker can patch them in app.tasks
 
@@ -4589,7 +4588,7 @@ async def jira_subtask_without_parent_warning_task():
             if getattr(issue.fields, 'parent', None) is None:
                 comments = jira_client.get_comments(issue.key)
                 already_reminded = any(
-                    reminder_marker in getattr(c, 'body', '') for c in comments
+                    (reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments
                 )
 
                 if not already_reminded:
@@ -4994,7 +4993,7 @@ async def jira_unassigned_bug_reminder_task():
                 continue
 
             comments = jira_client.get_comments(issue.key)
-            already_reminded = any(marker in getattr(c, "body", "") for c in comments)
+            already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
             if not already_reminded:
                 logger.info(f"Adding unassigned bug reminder to {issue.key}")
@@ -5083,7 +5082,7 @@ async def jira_epic_completion_checker_task():
 
                 if all_done:
                     comments = jira_client.get_comments(epic.key)
-                    already_reminded = any(marker in getattr(c, "body", "") for c in comments)
+                    already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_reminded:
                         logger.info(f"Adding Epic completion reminder to {epic.key}")
@@ -5123,7 +5122,7 @@ async def jira_too_many_subtasks_warning_task():
             comments = jira_client.get_comments(issue.key)
             already_commented = False
             for comment in comments:
-                if marker in getattr(comment, "body", ""):
+                if (marker in getattr(comment, "body", "") or marker in BeautifulSoup(getattr(comment, "body", ""), "html.parser").get_text()):
                     already_commented = True
                     break
 
@@ -5154,7 +5153,7 @@ async def jira_unassigned_epic_warning_task():
     for issue in issues:
         if getattr(issue.fields, 'assignee', None) is None:
             comments = jira_client.get_comments(issue.key)
-            if not any(marker in getattr(c, 'body', '') for c in comments):
+            if not any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments):
                 body = (
                     "It looks like this Epic doesn't have an assignee. "
                     "Epics generally need an owner to drive their completion. "
@@ -5350,7 +5349,7 @@ async def jira_bug_missing_attachment_warning_task():
             if not attachments:
                 # Check if we already warned
                 comments = jira_client.get_comments(issue.key)
-                if not any(marker in getattr(c, 'body', '') for c in comments):
+                if not any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments):
                     body = (
                         "⚠️ **Missing Attachments Warning**\n\n"
                         "This bug report does not have any attachments. "
@@ -5391,7 +5390,7 @@ async def jira_stale_active_sprint_issue_warning_task():
         try:
             # Check if we already warned
             comments = jira_client.get_comments(issue.key)
-            if not any(marker in getattr(c, 'body', '') for c in comments):
+            if not any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments):
                 assignee = getattr(issue.fields, 'assignee', None)
                 assignee_mention = f"[~accountid:{assignee.accountId}]" if assignee and getattr(assignee, 'accountId', None) else "Assignee"
 
@@ -5612,7 +5611,7 @@ async def jira_unestimated_bug_warning_task():
 
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     logger.info(f"Adding unestimated bug warning to {issue.key}")
@@ -5667,7 +5666,7 @@ async def jira_subtask_missing_estimate_warning_task():
 
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any(marker in getattr(c, "body", "") for c in comments)
+                already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     logger.info(f"Adding subtask missing estimate warning to {issue.key}")
@@ -5721,9 +5720,9 @@ async def jira_subtask_missing_assignee_warning_task():
                     continue
 
                 warning_message = (
-                    f"Hi there,\n\n"
-                    f"This subtask is currently unassigned. Please assign it to the appropriate team member to ensure it gets worked on.\n\n"
-                    f"<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_ASSIGNEE_WARNING -->"
+                    "Hi there,\n\n"
+                    "This subtask is currently unassigned. Please assign it to the appropriate team member to ensure it gets worked on.\n\n"
+                    "<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_ASSIGNEE_WARNING -->"
                 )
 
                 # Try to tag the parent assignee if available, or the reporter
@@ -5916,7 +5915,7 @@ async def jira_stale_assigned_task_warning_task():
                 try:
                     comments = jira_client.get_comments(issue.key)
                     already_reminded = any(
-                        reminder_marker in (c.body or "") for c in comments
+                        (reminder_marker in (c.body or "") or reminder_marker in BeautifulSoup((c.body or ""), "html.parser").get_text()) for c in comments
                     )
                     if already_reminded:
                         logger.info(f"Already sent stale assigned task warning for Jira task {issue.key}.")
@@ -5969,7 +5968,7 @@ async def jira_unassigned_in_progress_warning_task():
                 continue
 
             comments = jira_client.get_issue_comments(issue.key)
-            if any(marker in getattr(c, 'body', '') for c in comments):
+            if any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments):
                 continue
 
             comment_body = (
@@ -6096,7 +6095,7 @@ async def jira_bug_missing_components_warning_task():
                     continue
 
                 notes = jira_client.get_comments(issue.key)
-                if any(marker in getattr(note, "body", "") for note in notes):
+                if any((marker in getattr(note, "body", "") or marker in BeautifulSoup(getattr(note, "body", ""), "html.parser").get_text()) for note in notes):
                     continue
 
                 assignee_username = getattr(issue.fields, 'assignee', None)
@@ -6158,7 +6157,7 @@ async def jira_bug_missing_environment_warning_task():
                 already_commented = False
                 for c in comments:
                     body = c.get('body', '') if isinstance(c, dict) else getattr(c, 'body', '')
-                    if bot_comment_marker in body:
+                    if (bot_comment_marker in body or bot_comment_marker in BeautifulSoup(body, "html.parser").get_text()):
                         already_commented = True
                         break
 
@@ -6461,7 +6460,7 @@ async def jira_epic_missing_due_date_warning_task():
         already_warned = False
         for comment in comments:
             comment_body = getattr(comment, "body", "") or ""
-            if marker in comment_body:
+            if (marker in comment_body or marker in BeautifulSoup(comment_body, "html.parser").get_text()):
                 already_warned = True
                 break
 
@@ -6524,7 +6523,7 @@ async def jira_bug_missing_affected_version_warning_task():
             versions = getattr(issue.fields, "versions", [])
             if not versions:
                 comments = jira_client.get_comments(issue.key)
-                already_warned = any(marker in (getattr(c, "body", "") or "") for c in comments)
+                already_warned = any((marker in (getattr(c, "body", "") or "") or marker in BeautifulSoup((getattr(c, "body", "") or ""), "html.parser").get_text()) for c in comments)
                 if not already_warned:
                     message = (
                         f"{marker}\n"
@@ -6564,7 +6563,7 @@ async def jira_story_missing_subtasks_warning_task():
         subtasks = getattr(issue.fields, "subtasks", [])
         if not subtasks:
             comments = jira_client.get_comments(issue.key)
-            already_warned = any(marker in (getattr(c, "body", "") or "") for c in comments)
+            already_warned = any((marker in (getattr(c, "body", "") or "") or marker in BeautifulSoup((getattr(c, "body", "") or ""), "html.parser").get_text()) for c in comments)
             if not already_warned:
                 message = (
                     f"{marker}\n"
@@ -6612,7 +6611,7 @@ async def jira_epic_without_child_issues_warning_task():
         already_warned = False
         for comment in comments:
             comment_body = getattr(comment, "body", "") or ""
-            if marker in comment_body:
+            if (marker in comment_body or marker in BeautifulSoup(comment_body, "html.parser").get_text()):
                 already_warned = True
                 break
 
@@ -6774,7 +6773,7 @@ async def jira_story_missing_description_warning_task():
                 # Check if description is missing or completely empty
                 if not description or not description.strip():
                     comments = jira_client.get_comments(issue.key)
-                    already_warned = any(marker in getattr(c, "body", "") for c in comments)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_warned:
                         message = (
@@ -6870,7 +6869,7 @@ async def jira_epic_missing_description_warning_task():
                 # Check if description is missing or completely empty
                 if not description or not description.strip():
                     comments = jira_client.get_comments(issue.key)
-                    already_warned = any(marker in getattr(c, "body", "") for c in comments)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_warned:
                         message = (
@@ -7013,3 +7012,378 @@ async def jira_story_missing_story_points_warning_task():
 
     logger.info(f"Finished Jira story missing story points warning task. Warned {warned_count} stories.")
     return f"Jira story missing story points warning task completed. Warned {warned_count} stories."
+
+async def jira_subtask_missing_description_warning_task():
+    """
+    Checks active Jira Sub-task issues to ensure they have a description.
+    If a Sub-task lacks a description, a bot comment is added.
+    """
+    import logging
+    from app.clients.jira_client import JiraClient
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira subtask missing description warning task.")
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_SUBTASK_MISSING_DESCRIPTION_WARNING -->"
+    warned_count = 0
+
+    for j_proj in tracked_projects:
+        try:
+            # Active subtasks: not done, type Sub-task
+            jql = f'project = "{j_proj}" AND issuetype = "Sub-task" AND statusCategory != Done'
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                description = getattr(issue.fields, "description", None)
+
+                # Check if description is missing or completely empty
+                if not description or not description.strip():
+                    comments = jira_client.get_comments(issue.key)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
+
+                    if not already_warned:
+                        message = (
+                            f"{marker}\n"
+                            f"⚠️ **Warning**: This Sub-task is missing a description.\n"
+                            f"Please provide a clear and detailed description so the assignee understands the specific requirements of this task."
+                        )
+                        jira_client.add_comment(issue.key, message)
+                        logger.info(f"Added missing description warning to {issue.key}")
+                        warned_count += 1
+
+        except Exception as e:
+            logger.error(f"Error checking subtask description for project {j_proj}: {e}")
+
+    return f"Jira subtask missing description warning task completed. Warned {warned_count} subtasks."
+
+
+async def gitlab_mr_missing_jira_key_warning_task():
+    """
+    Phase 95: Checks open GitLab MRs to ensure their title contains a Jira issue key.
+    If missing, it adds an automated warning comment with a hidden marker.
+    """
+    import re
+    from app.clients.gitlab_client import GitLabClient
+    from app.clients import settings
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running GitLab MR missing Jira key warning task.")
+    gl_client = GitLabClient()
+    tracked_projects = settings.get("GITLAB_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_GITLAB_MR_MISSING_JIRA_KEY_WARNING -->"
+    jira_key_regex = re.compile(r'[A-Z][A-Z0-9]+-\d+')
+
+    warned_count = 0
+
+    for gl_proj in tracked_projects:
+        gl_proj = gl_proj.strip()
+        if not gl_proj:
+            continue
+
+        try:
+            mrs = gl_client.get_project_merge_requests(gl_proj, state='opened')
+            for mr in mrs:
+                title = getattr(mr, "title", "")
+                if jira_key_regex.search(title):
+                    continue
+
+                try:
+                    # Need the specific MR object to list notes
+                    # Use get_project rather than client.projects.get since the wrapper handles it
+                    mr_obj = gl_client.client.projects.get(gl_proj).mergerequests.get(mr.iid)
+                    notes = mr_obj.notes.list(get_all=True)
+
+                    already_warned = any(marker in getattr(n, "body", "") for n in notes)
+
+                    if not already_warned:
+                        message = (
+                            f"{marker}\n"
+                            f"Привет! Пожалуйста, добавь ключ задачи Jira (например, PROJ-123) в заголовок этого Merge Request."
+                        )
+                        mr_obj.notes.create({'body': message})
+                        logger.info(f"Posted missing Jira key warning on MR !{mr.iid} in project {gl_proj}.")
+                        warned_count += 1
+                except Exception as e:
+                    logger.error(f"Error checking notes/posting missing Jira key warning on MR !{mr.iid} in {gl_proj}: {e}")
+
+        except Exception as e:
+            logger.error(f"Failed to check missing Jira key for MRs in project {gl_proj}: {e}")
+
+    return f"GitLab MR missing Jira key warning task completed: warned {warned_count} MRs."
+
+
+async def confluence_missing_last_review_date_warning_task():
+    """
+    Checks Confluence pages to ensure they have a 'Last Reviewed Date'.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    confluence_client = ConfluenceClient()
+    spaces = [s.strip() for s in settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",") if s.strip()]
+
+    if not spaces:
+        return
+
+    marker = "<!-- AUTO_GENERATED_MISSING_LAST_REVIEW_DATE_WARNING -->"
+
+    for space in spaces:
+        cql = f'space = "{space}"'
+        try:
+            pages = confluence_client.cql(cql, start=0, limit=100, expand='body.storage,version,history.lastUpdated')
+            for page in pages.get("results", []):
+                # Search for 'last reviewed date', case-insensitive in the page body
+                body = page.get("body", {}).get("storage", {}).get("value", "")
+
+                if "last reviewed date" not in body.lower() and "last review date" not in body.lower():
+                    # Check if we already warned
+                    try:
+                        comments_data = confluence_client.get_page_comments(page["id"])
+                        comments = comments_data.get("results", [])
+                        already_warned = False
+
+                        for comment in comments:
+                            comment_body = comment.get("body", {}).get("storage", {}).get("value", "")
+                            if marker in comment_body:
+                                already_warned = True
+                                break
+
+                        if not already_warned:
+                            author_id = page.get("history", {}).get("lastUpdated", {}).get("by", {}).get("accountId")
+                            mention = f"[~accountid:{author_id}]" if author_id else "Author"
+
+                            message = (
+                                f"{marker}\n"
+                                f"Hi {mention},\n\n"
+                                f"It looks like this page is missing a **Last Reviewed Date** section. "
+                                f"Keeping documentation up to date is crucial. Please add a 'Last Reviewed Date' to the top or bottom of the page."
+                            )
+                            confluence_client.add_comment(page["id"], message)
+                            logger.info(f"Added missing last review date warning to Confluence page {page['id']}")
+                    except Exception as e:
+                        logger.error(f"Error checking comments for Confluence page {page['id']}: {e}")
+        except Exception as e:
+            logger.error(f"Error checking missing last review date for Confluence space {space}: {e}")
+
+
+async def gitlab_mr_missing_target_branch_validator_task():
+    """
+    Checks active GitLab MRs to ensure they have the proper target branch or required labels.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    gitlab_client = GitLabClient()
+    projects = [p.strip() for p in settings.get("GITLAB_TRACKED_PROJECTS", "").split(",") if p.strip()]
+
+    if not projects:
+        return
+
+    marker = "<!-- AUTO_GENERATED_MISSING_TARGET_BRANCH_VALIDATOR_WARNING -->"
+
+    for project_id in projects:
+        try:
+            project = gitlab_client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+            for mr in mrs:
+                if mr.target_branch == 'main' and 'direct-main-merge' not in mr.labels:
+                    # Check if already warned
+                    notes = mr.notes.list(get_all=True)
+                    already_warned = False
+                    for note in notes:
+                        if marker in getattr(note, 'body', ''):
+                            already_warned = True
+                            break
+
+                    if not already_warned:
+                        message = (
+                            f"{marker}\n"
+                            f"Hi @{mr.author.get('username')},\n\n"
+                            f"It looks like this Merge Request is targeting the `main` branch. "
+                            f"If this is intentional, please add the `direct-main-merge` label to bypass this warning. "
+                            f"Otherwise, please change the target branch to the appropriate integration branch."
+                        )
+                        mr.notes.create({'body': message})
+                        logger.info(f"Added missing target branch validator warning to MR {mr.iid} in project {project_id}")
+        except Exception as e:
+            logger.error(f"Error checking target branch validator for project {project_id}: {e}")
+
+
+async def jira_epic_missing_priority_warning_task():
+    """
+    Checks active Jira epics for missing priority fields.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    jira_client = JiraClient()
+    projects = [p.strip() for p in settings.get("JIRA_TRACKED_PROJECTS", "").split(",") if p.strip()]
+
+    if not projects:
+        return
+
+    marker = "<!-- AUTO_GENERATED_MISSING_EPIC_PRIORITY_WARNING -->"
+
+    for project in projects:
+        jql = f'project = "{project}" AND issuetype = Epic AND statusCategory != Done'
+        try:
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                priority = getattr(issue.fields, "priority", None)
+
+                # Check if priority is None or somehow empty/unassigned string
+                if not priority or not getattr(priority, "name", None):
+                    # Check if already warned
+                    comments = jira_client.get_comments(issue.key)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
+
+                    if not already_warned:
+                        assignee = getattr(issue.fields, "assignee", None)
+                        mention = f"[~accountid:{assignee.accountId}]" if assignee and getattr(assignee, "accountId", None) else "Owner"
+
+                        message = (
+                            f"{marker}\n"
+                            f"Hi {mention},\n\n"
+                            f"This Epic is missing a Priority assignment. "
+                            f"Please assign an appropriate priority to this Epic to help with roadmap planning and tracking."
+                        )
+                        jira_client.add_comment(issue.key, message)
+                        logger.info(f"Added missing priority warning to Epic {issue.key}")
+        except Exception as e:
+            logger.error(f"Error checking missing priority for Jira Epic in project {project}: {e}")
+
+
+async def confluence_outdated_architecture_diagram_warning_task():
+    """
+    Checks Confluence pages with architecture diagrams to see if they haven't been updated in over a year.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    confluence_client = ConfluenceClient()
+    spaces = [s.strip() for s in settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",") if s.strip()]
+
+    if not spaces:
+        return
+
+    marker = "<!-- AUTO_GENERATED_OUTDATED_ARCHITECTURE_DIAGRAM_WARNING -->"
+    now = datetime.now(timezone.utc)
+
+    for space in spaces:
+        # Search for diagrams in the space
+        # We can look for pages containing 'drawio', 'gliffy', 'plantuml' or 'diagram'
+        cql = f'space = "{space}" and (text ~ "drawio" or text ~ "gliffy" or text ~ "plantuml" or text ~ "diagram")'
+        try:
+            pages = confluence_client.cql(cql, start=0, limit=100, expand='body.storage,version,history.lastUpdated')
+            for page in pages.get("results", []):
+                # Check last updated date
+                last_updated_str = page.get("history", {}).get("lastUpdated", {}).get("when")
+                if not last_updated_str:
+                    continue
+
+                # Parsing date string
+                last_updated = datetime.fromisoformat(last_updated_str.replace("Z", "+00:00"))
+                days_since_update = (now - last_updated).days
+
+                if days_since_update > 365:
+                    # Check if already warned
+                    try:
+                        comments_data = confluence_client.get_page_comments(page["id"])
+                        comments = comments_data.get("results", [])
+                        already_warned = False
+
+                        for comment in comments:
+                            comment_body = comment.get("body", {}).get("storage", {}).get("value", "")
+                            if marker in comment_body:
+                                already_warned = True
+                                break
+
+                        if not already_warned:
+                            author_id = page.get("history", {}).get("lastUpdated", {}).get("by", {}).get("accountId")
+                            mention = f"[~accountid:{author_id}]" if author_id else "Author"
+
+                            message = (
+                                f"{marker}\n"
+                                f"Hi {mention},\n\n"
+                                f"It looks like this page contains an architecture diagram that hasn't been updated in over a year. "
+                                f"To ensure our technical documentation remains accurate, please review the diagram and update it if necessary."
+                            )
+                            confluence_client.add_comment(page["id"], message)
+                            logger.info(f"Added outdated architecture diagram warning to Confluence page {page['id']}")
+                    except Exception as e:
+                        logger.error(f"Error checking comments for Confluence page {page['id']}: {e}")
+        except Exception as e:
+            logger.error(f"Error checking outdated architecture diagrams for Confluence space {space}: {e}")
+
+
+async def jira_sprint_goal_missing_warning_task():
+    """
+    Checks active Jira sprints for missing sprint goals.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    jira_client = JiraClient()
+    projects = [p.strip() for p in settings.get("JIRA_TRACKED_PROJECTS", "").split(",") if p.strip()]
+
+    if not projects:
+        return
+
+    marker = "<!-- AUTO_GENERATED_MISSING_SPRINT_GOAL_WARNING -->"
+
+    for project in projects:
+        try:
+            # We typically query active sprints via boards. For simplicity, we search for issues in active sprints and then check their sprints.
+            # But the Jira client here is wrapped. We can query for issues in active sprints for this project.
+            jql = f'project = "{project}" AND sprint in openSprints()'
+            issues = jira_client.search_issues(jql, maxResults=100)
+
+            sprints_checked = set()
+
+            for issue in issues:
+                custom_field_sprint = getattr(issue.fields, "customfield_10020", []) # Often customfield_10020 contains sprint info
+                if not custom_field_sprint and hasattr(issue.fields, "sprint"):
+                    custom_field_sprint = [issue.fields.sprint]
+
+                for sprint in custom_field_sprint:
+                    if hasattr(sprint, "id"):
+                        sprint_id = sprint.id
+                        if sprint_id in sprints_checked:
+                            continue
+
+                        sprints_checked.add(sprint_id)
+
+                        goal = getattr(sprint, "goal", "")
+                        if not goal or not goal.strip():
+                            # We can't directly comment on a sprint. We will comment on the first issue found in this sprint to alert the team.
+                            comments = jira_client.get_comments(issue.key)
+                            already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
+
+                            if not already_warned:
+                                assignee = getattr(issue.fields, "assignee", None)
+                                mention = f"[~accountid:{assignee.accountId}]" if assignee and getattr(assignee, "accountId", None) else "Team Member"
+
+                                message = (
+                                    f"{marker}\n"
+                                    f"Hi {mention},\n\n"
+                                    f"The current active sprint this issue belongs to appears to be missing a **Sprint Goal**.\n"
+                                    f"Sprints without clear goals can suffer from scope creep. Please ensure the sprint goal is defined."
+                                )
+                                jira_client.add_comment(issue.key, message)
+                                logger.info(f"Added missing sprint goal warning to issue {issue.key} in project {project}")
+        except Exception as e:
+            logger.error(f"Error checking missing sprint goals in project {project}: {e}")

@@ -9,6 +9,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "atlassian-python-api>=4.0.7",
     "beautifulsoup4>=4.15.0",
+    "bs4>=0.0.2",
     "dynaconf>=3.3.0",
     "fastapi>=0.138.0",
     "greenlet>=3.5.2",

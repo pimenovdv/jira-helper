@@ -24,5 +24,5 @@ class ConfluenceClient(BaseClient):
     def search_cql(self, cql: str, limit: int = 10):
         try:
             return self.client.cql(cql, limit=limit)
-        except Exception as e:
+        except Exception:
             return {}
