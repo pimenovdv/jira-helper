@@ -7199,3 +7199,68 @@ async def jira_epic_missing_priority_warning_task():
                         logger.info(f"Added missing priority warning to Epic {issue.key}")
         except Exception as e:
             logger.error(f"Error checking missing priority for Jira Epic in project {project}: {e}")
+
+
+async def confluence_outdated_architecture_diagram_warning_task():
+    """
+    Checks Confluence pages with architecture diagrams to see if they haven't been updated in over a year.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    confluence_client = ConfluenceClient()
+    spaces = [s.strip() for s in settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",") if s.strip()]
+
+    if not spaces:
+        return
+
+    marker = "<!-- AUTO_GENERATED_OUTDATED_ARCHITECTURE_DIAGRAM_WARNING -->"
+    now = datetime.now(timezone.utc)
+
+    for space in spaces:
+        # Search for diagrams in the space
+        # We can look for pages containing 'drawio', 'gliffy', 'plantuml' or 'diagram'
+        cql = f'space = "{space}" and (text ~ "drawio" or text ~ "gliffy" or text ~ "plantuml" or text ~ "diagram")'
+        try:
+            pages = confluence_client.cql(cql, start=0, limit=100, expand='body.storage,version,history.lastUpdated')
+            for page in pages.get("results", []):
+                # Check last updated date
+                last_updated_str = page.get("history", {}).get("lastUpdated", {}).get("when")
+                if not last_updated_str:
+                    continue
+
+                # Parsing date string
+                last_updated = datetime.fromisoformat(last_updated_str.replace("Z", "+00:00"))
+                days_since_update = (now - last_updated).days
+
+                if days_since_update > 365:
+                    # Check if already warned
+                    try:
+                        comments_data = confluence_client.get_page_comments(page["id"])
+                        comments = comments_data.get("results", [])
+                        already_warned = False
+
+                        for comment in comments:
+                            comment_body = comment.get("body", {}).get("storage", {}).get("value", "")
+                            if marker in comment_body:
+                                already_warned = True
+                                break
+
+                        if not already_warned:
+                            author_id = page.get("history", {}).get("lastUpdated", {}).get("by", {}).get("accountId")
+                            mention = f"[~accountid:{author_id}]" if author_id else "Author"
+
+                            message = (
+                                f"{marker}\n"
+                                f"Hi {mention},\n\n"
+                                f"It looks like this page contains an architecture diagram that hasn't been updated in over a year. "
+                                f"To ensure our technical documentation remains accurate, please review the diagram and update it if necessary."
+                            )
+                            confluence_client.add_comment(page["id"], message)
+                            logger.info(f"Added outdated architecture diagram warning to Confluence page {page['id']}")
+                    except Exception as e:
+                        logger.error(f"Error checking comments for Confluence page {page['id']}: {e}")
+        except Exception as e:
+            logger.error(f"Error checking outdated architecture diagrams for Confluence space {space}: {e}")
