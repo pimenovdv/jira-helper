@@ -3,7 +3,6 @@ import pytest
 from playwright.async_api import async_playwright
 import uvicorn
 import asyncio
-
 import multiprocessing
 import time
 import requests
@@ -15,11 +14,11 @@ async def dummy_lifespan(app_obj):
 
 def run_server():
     from app.main import app
+    import unittest.mock
 
     # Replace lifespan to avoid DB connection errors during test
     app.router.lifespan_context = dummy_lifespan
 
-    import unittest.mock
     with unittest.mock.patch('app.main.GitLabClient'), \
          unittest.mock.patch('app.main.JiraClient'), \
          unittest.mock.patch('app.main.ConfluenceClient'), \
@@ -33,7 +32,7 @@ def test_server():
     process.start()
 
     # Wait for server to start
-    for _ in range(500):
+    for _ in range(100):
         try:
             requests.get("http://127.0.0.1:8001/api/health")
             break
