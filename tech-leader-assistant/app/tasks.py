@@ -7264,3 +7264,64 @@ async def confluence_outdated_architecture_diagram_warning_task():
                         logger.error(f"Error checking comments for Confluence page {page['id']}: {e}")
         except Exception as e:
             logger.error(f"Error checking outdated architecture diagrams for Confluence space {space}: {e}")
+
+
+async def jira_sprint_goal_missing_warning_task():
+    """
+    Checks active Jira sprints for missing sprint goals.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    jira_client = JiraClient()
+    projects = [p.strip() for p in settings.get("JIRA_TRACKED_PROJECTS", "").split(",") if p.strip()]
+
+    if not projects:
+        return
+
+    marker = "<!-- AUTO_GENERATED_MISSING_SPRINT_GOAL_WARNING -->"
+
+    for project in projects:
+        try:
+            # We typically query active sprints via boards. For simplicity, we search for issues in active sprints and then check their sprints.
+            # But the Jira client here is wrapped. We can query for issues in active sprints for this project.
+            jql = f'project = "{project}" AND sprint in openSprints()'
+            issues = jira_client.search_issues(jql, maxResults=100)
+
+            sprints_checked = set()
+
+            for issue in issues:
+                custom_field_sprint = getattr(issue.fields, "customfield_10020", []) # Often customfield_10020 contains sprint info
+                if not custom_field_sprint and hasattr(issue.fields, "sprint"):
+                    custom_field_sprint = [issue.fields.sprint]
+
+                for sprint in custom_field_sprint:
+                    if hasattr(sprint, "id"):
+                        sprint_id = sprint.id
+                        if sprint_id in sprints_checked:
+                            continue
+
+                        sprints_checked.add(sprint_id)
+
+                        goal = getattr(sprint, "goal", "")
+                        if not goal or not goal.strip():
+                            # We can't directly comment on a sprint. We will comment on the first issue found in this sprint to alert the team.
+                            comments = jira_client.get_comments(issue.key)
+                            already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
+
+                            if not already_warned:
+                                assignee = getattr(issue.fields, "assignee", None)
+                                mention = f"[~accountid:{assignee.accountId}]" if assignee and getattr(assignee, "accountId", None) else "Team Member"
+
+                                message = (
+                                    f"{marker}\n"
+                                    f"Hi {mention},\n\n"
+                                    f"The current active sprint this issue belongs to appears to be missing a **Sprint Goal**.\n"
+                                    f"Sprints without clear goals can suffer from scope creep. Please ensure the sprint goal is defined."
+                                )
+                                jira_client.add_comment(issue.key, message)
+                                logger.info(f"Added missing sprint goal warning to issue {issue.key} in project {project}")
+        except Exception as e:
+            logger.error(f"Error checking missing sprint goals in project {project}: {e}")

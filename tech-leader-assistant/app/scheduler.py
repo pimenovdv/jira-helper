@@ -578,6 +578,7 @@ def setup_scheduler():
     from app.tasks import gitlab_mr_missing_target_branch_validator_task
     from app.tasks import jira_epic_missing_priority_warning_task
     from app.tasks import confluence_outdated_architecture_diagram_warning_task
+    from app.tasks import jira_sprint_goal_missing_warning_task
     scheduler.add_job(
         gitlab_mr_missing_jira_key_warning_task,
         "cron",
