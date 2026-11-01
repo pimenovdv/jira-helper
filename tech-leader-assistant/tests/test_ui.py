@@ -13,18 +13,11 @@ async def dummy_lifespan(app):
     yield
 
 def run_server():
-    from unittest.mock import patch
-    import uvicorn
-    from app.main import app
-
     # Replace lifespan to avoid DB connection errors during test
     app.router.lifespan_context = dummy_lifespan
 
-    with patch("app.main.GitLabClient"), \
-         patch("app.main.JiraClient"), \
-         patch("app.main.ConfluenceClient"), \
-         patch("app.main.Neo4jClient"), \
-         patch("app.main.OpenSearchClient"):
+    from unittest.mock import patch
+    with patch("app.main.GitLabClient"), patch("app.main.JiraClient"), patch("app.main.ConfluenceClient"), patch("app.main.Neo4jClient"), patch("app.main.OpenSearchClient"):
         uvicorn.run(app, host="127.0.0.1", port=8001, log_level="error")
 
 @pytest.fixture(scope="module", autouse=True)
