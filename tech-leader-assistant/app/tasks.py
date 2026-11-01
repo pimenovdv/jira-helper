@@ -745,7 +745,7 @@ async def mr_summarization_task():
             for mr in mrs:
                 try:
                     notes = mr.notes.list(all=True)
-                    already_summarized = any((summary_marker in note.body or summary_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                    already_summarized = any(summary_marker in note.body for note in notes)
                     if already_summarized:
                         continue
 
@@ -885,7 +885,7 @@ async def stale_mr_reminder_task():
                         continue
 
                     notes = mr.notes.list(all=True)
-                    already_reminded = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                    already_reminded = any(reminder_marker in note.body for note in notes)
                     if already_reminded:
                         continue
 
@@ -952,7 +952,7 @@ async def stale_jira_task_reminder_task():
                     comments = jira_client.get_comments(issue.key)
                     already_reminded = False
                     for comment in comments:
-                        if (reminder_marker in getattr(comment, 'body', '') or reminder_marker in BeautifulSoup(getattr(comment, 'body', ''), "html.parser").get_text()):
+                        if reminder_marker in getattr(comment, 'body', ''):
                             already_reminded = True
                             break
 
@@ -1152,7 +1152,7 @@ async def gitlab_mr_jira_validator_task():
                     notes = mr.notes.list(all=True)
                     has_reminder = False
                     for note in notes:
-                        if (reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()):
+                        if reminder_marker in note.body:
                             has_reminder = True
                             break
 
@@ -1199,7 +1199,7 @@ async def gitlab_mr_conflict_notifier_task():
             for mr in mrs:
                 if hasattr(mr, "has_conflicts") and mr.has_conflicts:
                     mr_notes = mr.notes.list(get_all=True)
-                    already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in mr_notes)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
 
                     if not already_notified:
                         prompt = (
@@ -1254,7 +1254,7 @@ async def gitlab_mr_missing_description_notifier_task():
                 description = mr.description or ""
                 if len(description.strip()) < 10:
                     mr_notes = mr.notes.list(get_all=True)
-                    already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in mr_notes)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
 
                     if not already_notified:
                         prompt = (
@@ -1452,7 +1452,7 @@ async def gitlab_mr_cicd_failure_notifier_task():
 
                     reminder_marker = f"<!-- AUTO_GENERATED_CI_FAILURE_NOTIFIER_{latest_pipeline.id} -->"
                     mr_notes = mr.notes.list(get_all=True)
-                    already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in mr_notes)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
 
                     if not already_notified:
                         prompt = (
@@ -1522,7 +1522,7 @@ async def jira_missing_acceptance_criteria_reminder_task():
                 comments_obj = jira_client.get_comments(issue.key)
                 # Jira API might return a dict or object depending on implementation, jira package returns object with comments list
                 # Actually, jira_client.get_comments returns list of comment objects
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments_obj)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments_obj)
 
                 if already_reminded:
                     continue
@@ -1584,7 +1584,7 @@ async def gitlab_mr_too_many_comments_notifier_task():
                     if user_discussions_count > threshold:
                         # Check if reminder already posted
                         notes = mr.notes.list(get_all=True)
-                        already_reminded = any((reminder_marker in getattr(n, 'body', '') or reminder_marker in BeautifulSoup(getattr(n, 'body', ''), "html.parser").get_text()) for n in notes)
+                        already_reminded = any(reminder_marker in getattr(n, 'body', '') for n in notes)
 
                         if not already_reminded:
                             message = (
@@ -1644,7 +1644,7 @@ async def jira_overdue_task_reminder_task():
 
                 if due_date < now:
                     comments = jira_client.get_comments(issue.key)
-                    already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                    already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_reminded:
                         message = (
@@ -1717,7 +1717,7 @@ async def gitlab_mr_missing_tests_notifier_task():
                 if has_source_changes and not has_test_changes:
                     # Check if we already reminded
                     notes = full_mr.notes.list(all=True)
-                    already_notified = any((reminder_marker in getattr(n, "body", "") or reminder_marker in BeautifulSoup(getattr(n, "body", ""), "html.parser").get_text()) for n in notes)
+                    already_notified = any(reminder_marker in getattr(n, "body", "") for n in notes)
 
                     if not already_notified:
                         prompt = (
@@ -1773,7 +1773,7 @@ async def jira_missing_description_reminder_task():
                 # Check if description is missing or very short
                 if not description or len(description.strip()) < 20:
                     comments = jira_client.get_comments(issue.key)
-                    already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                    already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_reminded:
                         prompt = (
@@ -1830,7 +1830,7 @@ async def gitlab_mr_missing_reviewer_notifier_task():
                     continue
 
                 mr_notes = mr.notes.list(get_all=True)
-                already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in mr_notes)
+                already_notified = any(reminder_marker in note.body for note in mr_notes)
 
                 if not already_notified:
                     prompt = (
@@ -1965,7 +1965,7 @@ async def jira_sprint_unassigned_task_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -2035,7 +2035,7 @@ async def gitlab_mr_title_linter_task():
 
                 try:
                     notes = gitlab_client.get_mr_notes(project_id, mr.iid)
-                    already_reminded = any((marker in (note.body or "") or marker in BeautifulSoup(note.body or "", "html.parser").get_text()) for note in notes)
+                    already_reminded = any(marker in (note.body or "") for note in notes)
 
                     if not already_reminded:
                         prompt = (
@@ -2089,7 +2089,7 @@ async def jira_missing_component_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -2141,7 +2141,7 @@ async def jira_missing_fixversion_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -2207,7 +2207,7 @@ async def gitlab_long_running_mr_reminder_task():
                         continue
 
                     notes = mr.notes.list(all=True)
-                    already_reminded = any((reminder_marker in getattr(note, 'body', '') or reminder_marker in BeautifulSoup(getattr(note, 'body', ''), "html.parser").get_text()) for note in notes)
+                    already_reminded = any(reminder_marker in getattr(note, 'body', '') for note in notes)
                     if already_reminded:
                         continue
 
@@ -2266,7 +2266,7 @@ async def jira_inactive_reporter_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     reporter_name = getattr(issue.fields.reporter, "displayName", "Reporter") if hasattr(issue.fields, "reporter") and issue.fields.reporter else "Reporter"
@@ -2321,7 +2321,7 @@ async def jira_blocked_issue_followup_reminder_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     assignee_id = getattr(issue.fields.assignee, "accountId", None)
@@ -2376,7 +2376,7 @@ async def jira_blocked_task_alert_task():
         for issue in issues:
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -2541,7 +2541,7 @@ async def jira_missing_epic_reminder_task():
                         continue
 
                     comments = jira_client.get_issue_comments(issue_key)
-                    already_reminded = any(reminder_marker in c.get("body", "") for c in comments)
+                    already_reminded = any((reminder_marker in c.get("body", "") or reminder_marker in BeautifulSoup(c.get("body", ""), "html.parser").get_text()) for c in comments)
 
                     if already_reminded:
                         continue
@@ -2622,7 +2622,7 @@ async def jira_high_complexity_warning_task():
                         continue
 
                     comments = jira_client.get_issue_comments(issue_key)
-                    already_reminded = any(reminder_marker in c.get("body", "") for c in comments)
+                    already_reminded = any((reminder_marker in c.get("body", "") or reminder_marker in BeautifulSoup(c.get("body", ""), "html.parser").get_text()) for c in comments)
 
                     if already_reminded:
                         continue
@@ -2684,7 +2684,7 @@ async def gitlab_mr_missing_assignee_notifier_task():
                         continue
 
                     notes = mr.notes.list(all=True)
-                    already_reminded = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                    already_reminded = any(reminder_marker in note.body for note in notes)
 
                     if not already_reminded:
                         author_name = getattr(getattr(mr, 'author', None), 'username', 'Author')
@@ -2742,7 +2742,7 @@ async def jira_missing_labels_reminder_task():
                     continue
 
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if already_reminded:
                     continue
@@ -2866,7 +2866,7 @@ async def gitlab_mr_missing_milestone_notifier_task():
             for mr in mrs:
                 if mr.milestone is None:
                     mr_notes = mr.notes.list(get_all=True)
-                    already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in mr_notes)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
 
                     if not already_notified:
                         messages = [
@@ -2932,7 +2932,7 @@ async def jira_large_story_decomposition_reminder_task():
                     continue
 
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if already_reminded:
                     continue
@@ -2994,7 +2994,7 @@ async def jira_high_priority_out_of_sprint_reminder_task():
 
             for issue in issues:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
                 if already_reminded:
                     continue
 
@@ -3057,7 +3057,7 @@ async def gitlab_mr_description_checklist_validator_task():
 
                 mr_iid = mr_data.get("iid")
                 notes = gitlab_client.get_mr_notes(gl_proj, mr_iid)
-                already_reminded = any((reminder_marker in getattr(n, "body", "") or reminder_marker in BeautifulSoup(getattr(n, "body", ""), "html.parser").get_text()) for n in notes)
+                already_reminded = any(reminder_marker in getattr(n, "body", "") for n in notes)
 
                 if already_reminded:
                     continue
@@ -3133,7 +3133,7 @@ async def gitlab_mr_code_churn_notifier_task():
                         # Check comments to prevent duplicates
                         notes = mr.notes.list(all=True)
                         marker = "<!-- AUTO_GENERATED_CHURN_ALERT -->"
-                        already_commented = any((marker in getattr(n, 'body', '') or marker in BeautifulSoup(getattr(n, 'body', ''), "html.parser").get_text()) for n in notes)
+                        already_commented = any(marker in getattr(n, 'body', '') for n in notes)
 
                         if not already_commented:
                             body = f"{marker}\n**Code Churn Alert**: This MR introduces significant code churn ({churn} additions/deletions). Please consider breaking it down into smaller, more manageable MRs to ease review."
@@ -3178,7 +3178,7 @@ async def jira_stale_epic_reminder_task():
 
             for issue in issues:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
                 if already_reminded:
                     continue
 
@@ -3239,7 +3239,7 @@ async def gitlab_mr_missing_labels_notifier_task():
                     if not labels:
                         # Check if we already posted a reminder
                         notes = mr.notes.list(all=True)
-                        already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                        already_notified = any(reminder_marker in note.body for note in notes)
 
                         if not already_notified:
                             author_username = mr.author.get("username", "author") if hasattr(mr, "author") and isinstance(mr.author, dict) else "author"
@@ -3622,7 +3622,7 @@ async def gitlab_mr_wip_limit_reminder_task():
             try:
                 # Check if we already notified on this specific MR
                 notes = target_mr.notes.list(all=True)
-                already_notified = any((marker in note.body or marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                already_notified = any(marker in note.body for note in notes)
 
                 if already_notified:
                     logger.info(f"Already notified {author} about WIP limit on MR !{target_mr.iid}.")
@@ -3675,7 +3675,7 @@ async def jira_stale_in_progress_reminder_task():
             for issue in issues:
                 comments = jira_client.get_comments(issue.key)
                 already_reminded = any(
-                    (reminder_marker in (c.body or "") or reminder_marker in BeautifulSoup(c.body or "", "html.parser").get_text()) for c in comments
+                    (reminder_marker in (c.body or "") or reminder_marker in BeautifulSoup((c.body or ""), "html.parser").get_text()) for c in comments
                 )
                 if already_reminded:
                     logger.info(f"Already sent stale 'In Progress' reminder for Jira task {issue.key}.")
@@ -3857,7 +3857,7 @@ async def gitlab_mr_missing_tests_checker_task():
 
                 if has_source_changes and not has_test_changes:
                     mr_notes = mr_obj.notes.list(get_all=True)
-                    already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in mr_notes)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
 
                     if not already_notified:
                         prompt = (
@@ -3928,7 +3928,7 @@ async def gitlab_mr_missing_changelog_checker_task():
 
                 if has_source_changes and not has_changelog_changes:
                     mr_notes = mr_obj.notes.list(get_all=True)
-                    already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in mr_notes)
+                    already_notified = any(reminder_marker in note.body for note in mr_notes)
 
                     if not already_notified:
                         prompt = (
@@ -4055,7 +4055,7 @@ async def gitlab_mr_description_template_validator_task():
 
                 mr_iid = mr_data.get("iid")
                 notes = gitlab_client.get_mr_notes(gl_proj, mr_iid)
-                already_reminded = any((reminder_marker in getattr(n, "body", "") or reminder_marker in BeautifulSoup(getattr(n, "body", ""), "html.parser").get_text()) for n in notes)
+                already_reminded = any(reminder_marker in getattr(n, "body", "") for n in notes)
 
                 if already_reminded:
                     continue
@@ -4191,7 +4191,7 @@ async def jira_missing_priority_reminder_task():
                     continue
 
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     prompt = (
@@ -4255,7 +4255,7 @@ async def jira_closed_missing_resolution_task():
                 try:
                     comments = jira_client.get_comments(issue.key)
                     for comment in comments:
-                        if hasattr(comment, "body") and reminder_marker in comment.body:
+                        if hasattr(comment, "body") and (reminder_marker in comment.body or reminder_marker in BeautifulSoup(comment.body, "html.parser").get_text()):
                             has_bot_comment = True
                             break
                 except Exception as e:
@@ -4318,7 +4318,7 @@ async def jira_missing_due_date_reminder_task():
                     continue
 
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if already_reminded:
                     logger.info(f"Skipping {issue.key}, due date reminder already sent.")
@@ -4379,7 +4379,7 @@ async def gitlab_mr_delete_source_branch_checker_task():
 
                 # Check if we already reminded them
                 notes = mr.notes.list(get_all=True)
-                already_reminded = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                already_reminded = any(reminder_marker in note.body for note in notes)
 
                 if already_reminded:
                     logger.info(f"Skipping MR {mr.iid} in project {project_id}, already reminded about deleting source branch.")
@@ -4465,7 +4465,7 @@ async def gitlab_mr_stale_approval_reminder_task():
 
                 # Check if we already reminded them
                 notes = mr.notes.list(get_all=True)
-                already_reminded = any((reminder_marker in (note.body or "") or reminder_marker in BeautifulSoup(note.body or "", "html.parser").get_text()) for note in notes)
+                already_reminded = any(reminder_marker in (note.body or "") for note in notes)
 
                 if already_reminded:
                     logger.info(f"Skipping MR {mr.iid} in project {project_id}, already sent stale approval reminder.")
@@ -4527,7 +4527,7 @@ async def gitlab_mr_missing_milestone_reminder_task():
 
                 # Check if we already reminded them
                 notes = mr.notes.list(get_all=True)
-                already_reminded = any((reminder_marker in (note.body or "") or reminder_marker in BeautifulSoup(note.body or "", "html.parser").get_text()) for note in notes)
+                already_reminded = any(reminder_marker in (note.body or "") for note in notes)
 
                 if already_reminded:
                     logger.info(f"Skipping MR {mr.iid} in project {project_id}, already sent missing milestone reminder.")
@@ -4589,7 +4589,7 @@ async def jira_subtask_without_parent_warning_task():
             if getattr(issue.fields, 'parent', None) is None:
                 comments = jira_client.get_comments(issue.key)
                 already_reminded = any(
-                    (reminder_marker in getattr(c, 'body', '') or reminder_marker in BeautifulSoup(getattr(c, 'body', ''), "html.parser").get_text()) or reminder_marker in BeautifulSoup(getattr(c, 'body', ''), 'html.parser').get_text() for c in comments
+                    (reminder_marker in getattr(c, "body", "") or reminder_marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments
                 )
 
                 if not already_reminded:
@@ -4830,7 +4830,7 @@ async def gitlab_mr_missing_release_notes_checker_task():
 
                 try:
                     notes = mr.notes.list(get_all=True)
-                    already_reminded = any((reminder_marker in (note.body or "") or reminder_marker in BeautifulSoup(note.body or "", "html.parser").get_text()) for note in notes)
+                    already_reminded = any(reminder_marker in (note.body or "") for note in notes)
 
                     if not already_reminded:
                         author = mr.author.get('username', 'author') if hasattr(mr, 'author') and isinstance(mr.author, dict) else 'author'
@@ -4994,7 +4994,7 @@ async def jira_unassigned_bug_reminder_task():
                 continue
 
             comments = jira_client.get_comments(issue.key)
-            already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+            already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
             if not already_reminded:
                 logger.info(f"Adding unassigned bug reminder to {issue.key}")
@@ -5032,7 +5032,7 @@ async def gitlab_mr_missing_description_reminder_task():
                 description = getattr(mr, "description", "") or ""
                 if len(description.strip()) < 10:
                     notes = gitlab_client.get_mr_notes(project_id, mr.iid)
-                    already_reminded = any((marker in getattr(note, "body", "") or marker in BeautifulSoup(getattr(note, "body", ""), "html.parser").get_text()) for note in notes)
+                    already_reminded = any(marker in getattr(note, "body", "") for note in notes)
 
                     if not already_reminded:
                         logger.info(f"Adding missing description reminder to MR !{mr.iid} in project {project_id}")
@@ -5083,7 +5083,7 @@ async def jira_epic_completion_checker_task():
 
                 if all_done:
                     comments = jira_client.get_comments(epic.key)
-                    already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                    already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_reminded:
                         logger.info(f"Adding Epic completion reminder to {epic.key}")
@@ -5154,7 +5154,7 @@ async def jira_unassigned_epic_warning_task():
     for issue in issues:
         if getattr(issue.fields, 'assignee', None) is None:
             comments = jira_client.get_comments(issue.key)
-            if not any((marker in getattr(c, 'body', '') or marker in BeautifulSoup(getattr(c, 'body', ''), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, 'body', ''), 'html.parser').get_text() for c in comments):
+            if not any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments):
                 body = (
                     "It looks like this Epic doesn't have an assignee. "
                     "Epics generally need an owner to drive their completion. "
@@ -5202,7 +5202,7 @@ async def gitlab_mr_secrets_scanner_task():
                 if suspected_secrets:
                     # check if already warned
                     notes = mr.notes.list(all=True)
-                    if not any((marker in getattr(note, 'body', '') or marker in BeautifulSoup(getattr(note, 'body', ''), "html.parser").get_text()) for note in notes):
+                    if not any(marker in getattr(note, 'body', '') for note in notes):
                         warning_msg = (
                             "⚠️ **Warning: Potential secrets detected in this Merge Request.**\n\n"
                             "The following lines appear to contain hardcoded secrets (passwords, API keys, tokens, etc.):\n\n"
@@ -5305,7 +5305,7 @@ async def gitlab_mr_too_many_commits_notifier_task():
                     commits = list(mr.commits())
                     if len(commits) > threshold:
                         existing_notes = mr.notes.list(all=True)
-                        already_warned = any((marker in note.body or marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in existing_notes)
+                        already_warned = any(marker in note.body for note in existing_notes)
 
                         if not already_warned:
                             warning_msg = (
@@ -5350,7 +5350,7 @@ async def jira_bug_missing_attachment_warning_task():
             if not attachments:
                 # Check if we already warned
                 comments = jira_client.get_comments(issue.key)
-                if not any((marker in getattr(c, 'body', '') or marker in BeautifulSoup(getattr(c, 'body', ''), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, 'body', ''), 'html.parser').get_text() for c in comments):
+                if not any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments):
                     body = (
                         "⚠️ **Missing Attachments Warning**\n\n"
                         "This bug report does not have any attachments. "
@@ -5391,7 +5391,7 @@ async def jira_stale_active_sprint_issue_warning_task():
         try:
             # Check if we already warned
             comments = jira_client.get_comments(issue.key)
-            if not any((marker in getattr(c, 'body', '') or marker in BeautifulSoup(getattr(c, 'body', ''), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, 'body', ''), 'html.parser').get_text() for c in comments):
+            if not any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments):
                 assignee = getattr(issue.fields, 'assignee', None)
                 assignee_mention = f"[~accountid:{assignee.accountId}]" if assignee and getattr(assignee, 'accountId', None) else "Assignee"
 
@@ -5551,7 +5551,7 @@ async def gitlab_mr_missing_changelog_label_checker_task():
 
                     if not has_changelog_label:
                         notes = mr.notes.list(all=True)
-                        already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                        already_notified = any(reminder_marker in note.body for note in notes)
 
                         if not already_notified:
                             author_username = mr.author.get("username", "author") if hasattr(mr, "author") and isinstance(mr.author, dict) else "author"
@@ -5612,7 +5612,7 @@ async def jira_unestimated_bug_warning_task():
 
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     logger.info(f"Adding unestimated bug warning to {issue.key}")
@@ -5667,7 +5667,7 @@ async def jira_subtask_missing_estimate_warning_task():
 
             try:
                 comments = jira_client.get_comments(issue.key)
-                already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                already_reminded = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                 if not already_reminded:
                     logger.info(f"Adding subtask missing estimate warning to {issue.key}")
@@ -5795,7 +5795,7 @@ async def gitlab_mr_stale_needs_work_reminder_task():
 
                         if (now - commit_date) > timedelta(days=3):
                             notes = mr.notes.list(all=True)
-                            already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                            already_notified = any(reminder_marker in note.body for note in notes)
 
                             if not already_notified:
                                 author_username = mr.author.get("username", "author") if hasattr(mr, "author") and isinstance(mr.author, dict) else "author"
@@ -5860,7 +5860,7 @@ async def gitlab_mr_approved_but_unmerged_reminder_task():
 
                         if (now - mr_updated_at) > timedelta(days=3):
                             notes = mr.notes.list(all=True)
-                            already_notified = any((reminder_marker in note.body or reminder_marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                            already_notified = any(reminder_marker in note.body for note in notes)
 
                             if not already_notified:
                                 author_username = mr.author.get("username", "author") if hasattr(mr, "author") and isinstance(mr.author, dict) else "author"
@@ -5916,7 +5916,7 @@ async def jira_stale_assigned_task_warning_task():
                 try:
                     comments = jira_client.get_comments(issue.key)
                     already_reminded = any(
-                        (reminder_marker in (c.body or "") or reminder_marker in BeautifulSoup(c.body or "", "html.parser").get_text()) for c in comments
+                        (reminder_marker in (c.body or "") or reminder_marker in BeautifulSoup((c.body or ""), "html.parser").get_text()) for c in comments
                     )
                     if already_reminded:
                         logger.info(f"Already sent stale assigned task warning for Jira task {issue.key}.")
@@ -5969,7 +5969,7 @@ async def jira_unassigned_in_progress_warning_task():
                 continue
 
             comments = jira_client.get_issue_comments(issue.key)
-            if any((marker in getattr(c, 'body', '') or marker in BeautifulSoup(getattr(c, 'body', ''), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, 'body', ''), 'html.parser').get_text() for c in comments):
+            if any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments):
                 continue
 
             comment_body = (
@@ -6002,7 +6002,7 @@ async def gitlab_mr_missing_reviewers_notifier_task():
                     continue
 
                 notes = mr.notes.list(all=True)
-                if any((marker in (note.body or "") or marker in BeautifulSoup(note.body or "", "html.parser").get_text()) for note in notes):
+                if any(marker in (note.body or "") for note in notes):
                     continue
 
                 author_username = mr.author.get('username') if mr.author else "Team"
@@ -6044,7 +6044,7 @@ async def gitlab_mr_too_short_description_notifier_task():
                     continue
 
                 notes = mr.notes.list(all=True)
-                if any((marker in (note.body or "") or marker in BeautifulSoup(note.body or "", "html.parser").get_text()) for note in notes):
+                if any(marker in (note.body or "") for note in notes):
                     continue
 
                 author_username = mr.author.get('username') if hasattr(mr, 'author') and isinstance(mr.author, dict) else None
@@ -6096,7 +6096,7 @@ async def jira_bug_missing_components_warning_task():
                     continue
 
                 notes = jira_client.get_comments(issue.key)
-                if any((marker in getattr(note, "body", "") or marker in BeautifulSoup(getattr(note, "body", ""), "html.parser").get_text()) or marker in BeautifulSoup(getattr(note, "body", ""), 'html.parser').get_text() for note in notes):
+                if any((marker in getattr(note, "body", "") or marker in BeautifulSoup(getattr(note, "body", ""), "html.parser").get_text()) for note in notes):
                     continue
 
                 assignee_username = getattr(issue.fields, 'assignee', None)
@@ -6158,7 +6158,7 @@ async def jira_bug_missing_environment_warning_task():
                 already_commented = False
                 for c in comments:
                     body = c.get('body', '') if isinstance(c, dict) else getattr(c, 'body', '')
-                    if bot_comment_marker in body:
+                    if (bot_comment_marker in body or bot_comment_marker in BeautifulSoup(body, "html.parser").get_text()):
                         already_commented = True
                         break
 
@@ -6230,7 +6230,7 @@ async def gitlab_mr_stale_wip_warning_task():
 
                 try:
                     notes = mr.notes.list(all=True)
-                    has_warning = any((warning_marker in getattr(note, 'body', '') or warning_marker in BeautifulSoup(getattr(note, 'body', ''), "html.parser").get_text()) for note in notes)
+                    has_warning = any(warning_marker in getattr(note, 'body', '') for note in notes)
                     if has_warning:
                         continue
 
@@ -6308,7 +6308,7 @@ async def confluence_missing_labels_warning_task():
                         for comment in comments:
                             comment_body = comment.get('body', {}).get('storage', {}).get('value', '')
 
-                            if (reminder_marker in comment_body or reminder_marker in BeautifulSoup(comment_body, "html.parser").get_text()):
+                            if reminder_marker in comment_body:
                                 already_warned = True
                                 break
 
@@ -6410,7 +6410,7 @@ async def gitlab_mr_reviewer_self_assignment_warning_task():
                     reviewer = reviewers[0]
                     if reviewer.get('id') == author.get('id'):
                         notes = mr.notes.list(all=True)
-                        if any((marker in (note.body or "") or marker in BeautifulSoup(note.body or "", "html.parser").get_text()) for note in notes):
+                        if any(marker in (note.body or "") for note in notes):
                             continue
 
                         author_username = author.get('username')
@@ -6461,7 +6461,7 @@ async def jira_epic_missing_due_date_warning_task():
         already_warned = False
         for comment in comments:
             comment_body = getattr(comment, "body", "") or ""
-            if (marker in comment_body or marker in BeautifulSoup(comment_body, "html.parser").get_text()) or marker in BeautifulSoup(comment_body, 'html.parser').get_text():
+            if (marker in comment_body or marker in BeautifulSoup(comment_body, "html.parser").get_text()):
                 already_warned = True
                 break
 
@@ -6524,7 +6524,7 @@ async def jira_bug_missing_affected_version_warning_task():
             versions = getattr(issue.fields, "versions", [])
             if not versions:
                 comments = jira_client.get_comments(issue.key)
-                already_warned = any(marker in (getattr(c, "body", "") or "") for c in comments)
+                already_warned = any((marker in (getattr(c, "body", "") or "") or marker in BeautifulSoup((getattr(c, "body", "") or ""), "html.parser").get_text()) for c in comments)
                 if not already_warned:
                     message = (
                         f"{marker}\n"
@@ -6564,7 +6564,7 @@ async def jira_story_missing_subtasks_warning_task():
         subtasks = getattr(issue.fields, "subtasks", [])
         if not subtasks:
             comments = jira_client.get_comments(issue.key)
-            already_warned = any(marker in (getattr(c, "body", "") or "") for c in comments)
+            already_warned = any((marker in (getattr(c, "body", "") or "") or marker in BeautifulSoup((getattr(c, "body", "") or ""), "html.parser").get_text()) for c in comments)
             if not already_warned:
                 message = (
                     f"{marker}\n"
@@ -6612,7 +6612,7 @@ async def jira_epic_without_child_issues_warning_task():
         already_warned = False
         for comment in comments:
             comment_body = getattr(comment, "body", "") or ""
-            if (marker in comment_body or marker in BeautifulSoup(comment_body, "html.parser").get_text()) or marker in BeautifulSoup(comment_body, 'html.parser').get_text():
+            if (marker in comment_body or marker in BeautifulSoup(comment_body, "html.parser").get_text()):
                 already_warned = True
                 break
 
@@ -6774,7 +6774,7 @@ async def jira_story_missing_description_warning_task():
                 # Check if description is missing or completely empty
                 if not description or not description.strip():
                     comments = jira_client.get_comments(issue.key)
-                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_warned:
                         message = (
@@ -6820,7 +6820,7 @@ async def gitlab_mr_missing_labels_warning_task():
                 labels = getattr(mr, "labels", None)
                 if not labels:
                     notes = mr.notes.list(get_all=True)
-                    already_warned = any((marker in getattr(n, "body", "") or marker in BeautifulSoup(getattr(n, "body", ""), "html.parser").get_text()) for n in notes)
+                    already_warned = any(marker in getattr(n, "body", "") for n in notes)
 
                     if not already_warned:
                         message_body = (
@@ -6870,7 +6870,7 @@ async def jira_epic_missing_description_warning_task():
                 # Check if description is missing or completely empty
                 if not description or not description.strip():
                     comments = jira_client.get_comments(issue.key)
-                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_warned:
                         message = (
@@ -6931,7 +6931,7 @@ async def gitlab_mr_large_diff_warning_task():
 
                     if churn > CHURN_THRESHOLD:
                         notes = mr_obj.notes.list(get_all=True)
-                        already_warned = any((marker in note.body or marker in BeautifulSoup(note.body, "html.parser").get_text()) for note in notes)
+                        already_warned = any(marker in note.body for note in notes)
 
                         if not already_warned:
                             logger.info(f"MR !{mr.iid} in {gl_proj} has large diff ({churn} lines), adding warning.")
@@ -6980,7 +6980,7 @@ async def jira_subtask_missing_description_warning_task():
                 # Check if description is missing or completely empty
                 if not description or not description.strip():
                     comments = jira_client.get_comments(issue.key)
-                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) or marker in BeautifulSoup(getattr(c, "body", ""), 'html.parser').get_text() for c in comments)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
 
                     if not already_warned:
                         message = (
@@ -7035,7 +7035,7 @@ async def gitlab_mr_missing_jira_key_warning_task():
                     mr_obj = gl_client.client.projects.get(gl_proj).mergerequests.get(mr.iid)
                     notes = mr_obj.notes.list(get_all=True)
 
-                    already_warned = any((marker in getattr(n, "body", "") or marker in BeautifulSoup(getattr(n, "body", ""), "html.parser").get_text()) for n in notes)
+                    already_warned = any(marker in getattr(n, "body", "") for n in notes)
 
                     if not already_warned:
                         message = (
