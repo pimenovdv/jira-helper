@@ -52,7 +52,7 @@ def test_server():
 @pytest.mark.asyncio
 async def test_dashboard_renders():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or '/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
+        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or ('/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None))
         page = await browser.new_page()
 
         # intercept the API call to return a known mock response
@@ -84,7 +84,7 @@ async def test_dashboard_renders():
 @pytest.mark.asyncio
 async def test_timeline_renders():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or '/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
+        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or ('/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None))
         page = await browser.new_page()
 
         # intercept the health API call to return a known mock response to avoid health check errors
@@ -129,7 +129,7 @@ async def test_timeline_renders():
 @pytest.mark.asyncio
 async def test_dashboard_tasks_renders():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or '/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
+        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or ('/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None))
         page = await browser.new_page()
 
         # intercept the health API call to avoid errors
@@ -175,7 +175,7 @@ async def test_dashboard_tasks_renders():
 @pytest.mark.asyncio
 async def test_chat_interface_renders_and_functions():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or '/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
+        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or ('/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None))
         page = await browser.new_page()
 
         # intercept the health API call to avoid errors
