@@ -7153,3 +7153,49 @@ async def gitlab_mr_missing_target_branch_validator_task():
                         logger.info(f"Added missing target branch validator warning to MR {mr.iid} in project {project_id}")
         except Exception as e:
             logger.error(f"Error checking target branch validator for project {project_id}: {e}")
+
+
+async def jira_epic_missing_priority_warning_task():
+    """
+    Checks active Jira epics for missing priority fields.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    jira_client = JiraClient()
+    projects = [p.strip() for p in settings.get("JIRA_TRACKED_PROJECTS", "").split(",") if p.strip()]
+
+    if not projects:
+        return
+
+    marker = "<!-- AUTO_GENERATED_MISSING_EPIC_PRIORITY_WARNING -->"
+
+    for project in projects:
+        jql = f'project = "{project}" AND issuetype = Epic AND statusCategory != Done'
+        try:
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                priority = getattr(issue.fields, "priority", None)
+
+                # Check if priority is None or somehow empty/unassigned string
+                if not priority or not getattr(priority, "name", None):
+                    # Check if already warned
+                    comments = jira_client.get_comments(issue.key)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
+
+                    if not already_warned:
+                        assignee = getattr(issue.fields, "assignee", None)
+                        mention = f"[~accountid:{assignee.accountId}]" if assignee and getattr(assignee, "accountId", None) else "Owner"
+
+                        message = (
+                            f"{marker}\n"
+                            f"Hi {mention},\n\n"
+                            f"This Epic is missing a Priority assignment. "
+                            f"Please assign an appropriate priority to this Epic to help with roadmap planning and tracking."
+                        )
+                        jira_client.add_comment(issue.key, message)
+                        logger.info(f"Added missing priority warning to Epic {issue.key}")
+        except Exception as e:
+            logger.error(f"Error checking missing priority for Jira Epic in project {project}: {e}")
