@@ -6841,6 +6841,50 @@ async def gitlab_mr_missing_labels_warning_task():
     return f"GitLab MR missing labels warning task completed: warned {warned_count} MRs."
 
 
+async def jira_epic_missing_priority_warning_task():
+    """
+    Phase 94: Jira Epic Missing Priority Warning
+    Checks active Jira Epic issues to ensure they have a priority assigned.
+    """
+    import logging
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira epic missing priority warning task.")
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_EPIC_MISSING_PRIORITY_WARNING -->"
+    warned_count = 0
+
+    for j_proj in tracked_projects:
+        try:
+            # Active epics: not done, type Epic
+            jql = f'project = "{j_proj}" AND issuetype = "Epic" AND statusCategory != Done'
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                priority = getattr(issue.fields, "priority", None)
+                if not priority:
+                    comments = jira_client.get_comments(issue.key)
+                    already_warned = any(marker in getattr(c, "body", "") for c in comments)
+                    if not already_warned:
+                        message = (
+                            f"{marker}\n"
+                            f"⚠️ **Warning**: This Epic is missing a priority.\n"
+                            f"Please provide a priority so the team understands the importance of this Epic."
+                        )
+                        jira_client.add_comment(issue.key, message)
+                        logger.info(f"Posted missing priority warning to Jira Epic {issue.key}.")
+                        warned_count += 1
+        except Exception as e:
+            logger.error(f"Error checking epic priority for project {j_proj}: {e}")
+
+    return f"Jira epic missing priority warning task completed. Warned {warned_count} epics."
+
+
 async def jira_epic_missing_description_warning_task():
     """
     Checks active Jira Epic issues to ensure they have a description.

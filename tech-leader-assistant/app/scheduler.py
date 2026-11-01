@@ -563,6 +563,16 @@ def setup_scheduler():
         replace_existing=True,
     )
 
+    from app.tasks import jira_epic_missing_priority_warning_task
+    scheduler.add_job(
+        jira_epic_missing_priority_warning_task,
+        "cron",
+        hour=12,
+        minute=0,
+        id="jira_epic_missing_priority_warning_task",
+        replace_existing=True,
+    )
+
     logger.info("APScheduler jobs configured.")
 
 
