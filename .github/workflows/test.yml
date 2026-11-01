@@ -24,7 +24,7 @@ jobs:
       run: cd tech-leader-assistant && uv sync --dev
 
     - name: Install Playwright Browsers
-      run: cd tech-leader-assistant && uv run playwright install --with-deps
+      run: cd tech-leader-assistant && PLAYWRIGHT_BROWSERS_PATH=0 uv run playwright install --with-deps chromium
 
     - name: Run tests with pytest
       run: |
