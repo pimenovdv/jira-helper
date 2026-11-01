@@ -15,11 +15,16 @@ async def dummy_lifespan(app_obj):
 
 def run_server():
     from app.main import app
-    import unittest.mock
 
     # Replace lifespan to avoid DB connection errors during test
     app.router.lifespan_context = dummy_lifespan
-    with unittest.mock.patch('app.main.GitLabClient'), unittest.mock.patch('app.main.JiraClient'), unittest.mock.patch('app.main.ConfluenceClient'), unittest.mock.patch('app.main.Neo4jClient'), unittest.mock.patch('app.main.OpenSearchClient'):
+
+    import unittest.mock
+    with unittest.mock.patch('app.main.GitLabClient'), \
+         unittest.mock.patch('app.main.JiraClient'), \
+         unittest.mock.patch('app.main.ConfluenceClient'), \
+         unittest.mock.patch('app.main.Neo4jClient'), \
+         unittest.mock.patch('app.main.OpenSearchClient'):
         uvicorn.run(app, host="127.0.0.1", port=8001, log_level="error")
 
 @pytest.fixture(scope="module", autouse=True)
@@ -28,7 +33,7 @@ def test_server():
     process.start()
 
     # Wait for server to start
-    for _ in range(100):
+    for _ in range(500):
         try:
             requests.get("http://127.0.0.1:8001/api/health")
             break
@@ -47,7 +52,7 @@ def test_server():
 @pytest.mark.asyncio
 async def test_dashboard_renders():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path='/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
+        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or '/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
         page = await browser.new_page()
 
         # intercept the API call to return a known mock response
@@ -79,7 +84,7 @@ async def test_dashboard_renders():
 @pytest.mark.asyncio
 async def test_timeline_renders():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path='/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
+        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or '/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
         page = await browser.new_page()
 
         # intercept the health API call to return a known mock response to avoid health check errors
@@ -124,7 +129,7 @@ async def test_timeline_renders():
 @pytest.mark.asyncio
 async def test_dashboard_tasks_renders():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path='/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
+        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or '/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
         page = await browser.new_page()
 
         # intercept the health API call to avoid errors
@@ -170,7 +175,7 @@ async def test_dashboard_tasks_renders():
 @pytest.mark.asyncio
 async def test_chat_interface_renders_and_functions():
     async with async_playwright() as p:
-        browser = await p.chromium.launch(executable_path='/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
+        browser = await p.chromium.launch(executable_path=os.getenv('PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH') or '/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
         page = await browser.new_page()
 
         # intercept the health API call to avoid errors
