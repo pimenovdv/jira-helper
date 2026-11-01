@@ -7052,3 +7052,59 @@ async def gitlab_mr_missing_jira_key_warning_task():
             logger.error(f"Failed to check missing Jira key for MRs in project {gl_proj}: {e}")
 
     return f"GitLab MR missing Jira key warning task completed: warned {warned_count} MRs."
+
+
+async def confluence_missing_last_review_date_warning_task():
+    """
+    Checks Confluence pages to ensure they have a 'Last Reviewed Date'.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    confluence_client = ConfluenceClient()
+    spaces = [s.strip() for s in settings.get("CONFLUENCE_TRACKED_SPACES", "").split(",") if s.strip()]
+
+    if not spaces:
+        return
+
+    marker = "<!-- AUTO_GENERATED_MISSING_LAST_REVIEW_DATE_WARNING -->"
+
+    for space in spaces:
+        cql = f'space = "{space}"'
+        try:
+            pages = confluence_client.cql(cql, start=0, limit=100, expand='body.storage,version,history.lastUpdated')
+            for page in pages.get("results", []):
+                # Search for 'last reviewed date', case-insensitive in the page body
+                body = page.get("body", {}).get("storage", {}).get("value", "")
+
+                if "last reviewed date" not in body.lower() and "last review date" not in body.lower():
+                    # Check if we already warned
+                    try:
+                        comments_data = confluence_client.get_page_comments(page["id"])
+                        comments = comments_data.get("results", [])
+                        already_warned = False
+
+                        for comment in comments:
+                            comment_body = comment.get("body", {}).get("storage", {}).get("value", "")
+                            if marker in comment_body:
+                                already_warned = True
+                                break
+
+                        if not already_warned:
+                            author_id = page.get("history", {}).get("lastUpdated", {}).get("by", {}).get("accountId")
+                            mention = f"[~accountid:{author_id}]" if author_id else "Author"
+
+                            message = (
+                                f"{marker}\n"
+                                f"Hi {mention},\n\n"
+                                f"It looks like this page is missing a **Last Reviewed Date** section. "
+                                f"Keeping documentation up to date is crucial. Please add a 'Last Reviewed Date' to the top or bottom of the page."
+                            )
+                            confluence_client.add_comment(page["id"], message)
+                            logger.info(f"Added missing last review date warning to Confluence page {page['id']}")
+                    except Exception as e:
+                        logger.error(f"Error checking comments for Confluence page {page['id']}: {e}")
+        except Exception as e:
+            logger.error(f"Error checking missing last review date for Confluence space {space}: {e}")

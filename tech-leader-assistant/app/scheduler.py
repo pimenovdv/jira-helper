@@ -574,6 +574,7 @@ def setup_scheduler():
     )
 
     from app.tasks import gitlab_mr_missing_jira_key_warning_task
+    from app.tasks import confluence_missing_last_review_date_warning_task
     scheduler.add_job(
         gitlab_mr_missing_jira_key_warning_task,
         "cron",
