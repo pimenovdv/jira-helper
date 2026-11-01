@@ -1,7 +1,9 @@
+import os
 import pytest
 from playwright.async_api import async_playwright
 import uvicorn
 import asyncio
+
 import multiprocessing
 import time
 import requests
@@ -17,12 +19,7 @@ def run_server():
 
     # Replace lifespan to avoid DB connection errors during test
     app.router.lifespan_context = dummy_lifespan
-
-    with unittest.mock.patch('app.main.GitLabClient'), \
-         unittest.mock.patch('app.main.JiraClient'), \
-         unittest.mock.patch('app.main.ConfluenceClient'), \
-         unittest.mock.patch('app.main.Neo4jClient'), \
-         unittest.mock.patch('app.main.OpenSearchClient'):
+    with unittest.mock.patch('app.main.GitLabClient'), unittest.mock.patch('app.main.JiraClient'), unittest.mock.patch('app.main.ConfluenceClient'), unittest.mock.patch('app.main.Neo4jClient'), unittest.mock.patch('app.main.OpenSearchClient'):
         uvicorn.run(app, host="127.0.0.1", port=8001, log_level="error")
 
 @pytest.fixture(scope="module", autouse=True)
@@ -50,7 +47,7 @@ def test_server():
 @pytest.mark.asyncio
 async def test_dashboard_renders():
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        browser = await p.chromium.launch(executable_path='/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
         page = await browser.new_page()
 
         # intercept the API call to return a known mock response
@@ -82,7 +79,7 @@ async def test_dashboard_renders():
 @pytest.mark.asyncio
 async def test_timeline_renders():
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        browser = await p.chromium.launch(executable_path='/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
         page = await browser.new_page()
 
         # intercept the health API call to return a known mock response to avoid health check errors
@@ -127,7 +124,7 @@ async def test_timeline_renders():
 @pytest.mark.asyncio
 async def test_dashboard_tasks_renders():
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        browser = await p.chromium.launch(executable_path='/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
         page = await browser.new_page()
 
         # intercept the health API call to avoid errors
@@ -173,7 +170,7 @@ async def test_dashboard_tasks_renders():
 @pytest.mark.asyncio
 async def test_chat_interface_renders_and_functions():
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        browser = await p.chromium.launch(executable_path='/usr/bin/google-chrome-stable' if os.path.exists('/usr/bin/google-chrome-stable') else None)
         page = await browser.new_page()
 
         # intercept the health API call to avoid errors
