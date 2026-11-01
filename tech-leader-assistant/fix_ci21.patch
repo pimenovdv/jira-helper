@@ -1,0 +1,12 @@
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 93d0f08..6681094 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -3,6 +3,7 @@ import pytest
+ from playwright.async_api import async_playwright
+ import uvicorn
+ import asyncio
++
+ import multiprocessing
+ import time
+ import requests
