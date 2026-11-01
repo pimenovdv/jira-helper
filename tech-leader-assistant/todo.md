@@ -18,3 +18,11 @@
 - [x] Create `gitlab_mr_large_diff_warning_task` to check open Merge Requests in GitLab to warn if the changes exceed a certain threshold of added/removed lines.
 - [x] Schedule the task to run periodically in `app/scheduler.py`.
 - [x] Add tests to verify the behavior.
+
+### Phase 94: CI Pipeline Fixes
+- [x] Fix failing CI pipelines in GitHub actions. Fix pytest-asyncio settings, update to use `xvfb-run` for headless browsers, skip or fix hanging tests.
+
+### Phase 95: Jira Story Missing Story Points Warning
+- [x] Create `jira_story_missing_story_points_warning_task` in `app/tasks.py` to check open Stories in Jira to warn if the story points estimation is missing.
+- [x] Schedule the task to run periodically in `app/scheduler.py`.
+- [x] Add tests to verify the behavior.

@@ -6949,3 +6949,67 @@ async def gitlab_mr_large_diff_warning_task():
             logger.error(f"Error processing large diff warning for project {gl_proj}: {e}")
 
     return f"GitLab MR large diff warning task completed: warned {warned_count} MRs."
+
+async def jira_story_missing_story_points_warning_task():
+    """
+    Finds Story issues in active sprints (or unresolved) that lack story points.
+    Adds a comment warning that it should be estimated.
+    """
+    logger.info("Running Jira story missing story points warning task.")
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    story_points_field = settings.get("JIRA_STORY_POINTS_FIELD", "customfield_10016")
+    marker = "<!-- AUTO_GENERATED_JIRA_STORY_MISSING_STORY_POINTS_WARNING -->"
+    warned_count = 0
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND issuetype = "Story" AND statusCategory != Done'
+        try:
+            issues = jira_client.search_issues(jql)
+        except Exception as e:
+            logger.error(f"Error fetching issues for project {j_proj}: {e}")
+            continue
+
+        for issue in issues:
+            # Safely get story points or None
+            # Jira python client API will raise AttributeError if field does not exist
+            # however, during tests mocking this is difficult. We will use hasattr to be safe and testable.
+            if hasattr(issue.fields, story_points_field):
+                story_points = getattr(issue.fields, story_points_field)
+            else:
+                story_points = None
+
+            if story_points is not None:
+                continue
+
+            try:
+                comments = jira_client.get_comments(issue.key)
+                already_reminded = any(marker in getattr(c, "body", "") for c in comments)
+
+                if not already_reminded:
+                    logger.info(f"Adding missing story points warning to {issue.key}")
+                    assignee_mention = ""
+                    if getattr(issue.fields, "assignee", None):
+                        assignee_id = getattr(issue.fields.assignee, "accountId", "")
+                        if assignee_id:
+                            assignee_mention = f"[~accountid:{assignee_id}], "
+
+                    comment_body = (
+                        f"⚠️ {assignee_mention}This Story is missing story points estimation. "
+                        f"Please estimate the effort to help with sprint planning and capacity tracking.\n\n"
+                        f"{marker}"
+                    )
+                    jira_client.add_comment(issue.key, comment_body)
+                    warned_count += 1
+            except Exception as e:
+                logger.error(f"Error checking/adding comment to {issue.key}: {e}")
+
+    logger.info(f"Finished Jira story missing story points warning task. Warned {warned_count} stories.")
+    return f"Jira story missing story points warning task completed. Warned {warned_count} stories."
