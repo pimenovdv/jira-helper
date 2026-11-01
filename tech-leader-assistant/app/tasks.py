@@ -7108,3 +7108,48 @@ async def confluence_missing_last_review_date_warning_task():
                         logger.error(f"Error checking comments for Confluence page {page['id']}: {e}")
         except Exception as e:
             logger.error(f"Error checking missing last review date for Confluence space {space}: {e}")
+
+
+async def gitlab_mr_missing_target_branch_validator_task():
+    """
+    Checks active GitLab MRs to ensure they have the proper target branch or required labels.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    gitlab_client = GitLabClient()
+    projects = [p.strip() for p in settings.get("GITLAB_TRACKED_PROJECTS", "").split(",") if p.strip()]
+
+    if not projects:
+        return
+
+    marker = "<!-- AUTO_GENERATED_MISSING_TARGET_BRANCH_VALIDATOR_WARNING -->"
+
+    for project_id in projects:
+        try:
+            project = gitlab_client.client.projects.get(project_id)
+            mrs = project.mergerequests.list(state='opened', get_all=True)
+            for mr in mrs:
+                if mr.target_branch == 'main' and 'direct-main-merge' not in mr.labels:
+                    # Check if already warned
+                    notes = mr.notes.list(get_all=True)
+                    already_warned = False
+                    for note in notes:
+                        if marker in getattr(note, 'body', ''):
+                            already_warned = True
+                            break
+
+                    if not already_warned:
+                        message = (
+                            f"{marker}\n"
+                            f"Hi @{mr.author.get('username')},\n\n"
+                            f"It looks like this Merge Request is targeting the `main` branch. "
+                            f"If this is intentional, please add the `direct-main-merge` label to bypass this warning. "
+                            f"Otherwise, please change the target branch to the appropriate integration branch."
+                        )
+                        mr.notes.create({'body': message})
+                        logger.info(f"Added missing target branch validator warning to MR {mr.iid} in project {project_id}")
+        except Exception as e:
+            logger.error(f"Error checking target branch validator for project {project_id}: {e}")
