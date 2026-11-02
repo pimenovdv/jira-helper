@@ -579,12 +579,22 @@ def setup_scheduler():
     from app.tasks import jira_epic_missing_priority_warning_task
     from app.tasks import confluence_outdated_architecture_diagram_warning_task
     from app.tasks import jira_sprint_goal_missing_warning_task
+    from app.tasks import jira_bug_missing_reproduction_steps_warning_task
     scheduler.add_job(
         gitlab_mr_missing_jira_key_warning_task,
         "cron",
         hour="*/4",
         minute=0,
         id="gitlab_mr_missing_jira_key_warning_task",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        jira_bug_missing_reproduction_steps_warning_task,
+        "cron",
+        hour=11,
+        minute=45,
+        id="jira_bug_missing_reproduction_steps_warning_task",
         replace_existing=True,
     )
 

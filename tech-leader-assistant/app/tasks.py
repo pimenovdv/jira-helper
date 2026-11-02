@@ -7325,3 +7325,52 @@ async def jira_sprint_goal_missing_warning_task():
                                 logger.info(f"Added missing sprint goal warning to issue {issue.key} in project {project}")
         except Exception as e:
             logger.error(f"Error checking missing sprint goals in project {project}: {e}")
+
+async def jira_bug_missing_reproduction_steps_warning_task():
+    """
+    Checks active Jira bugs for missing reproduction steps in their description.
+    """
+    try:
+        from app.clients import settings
+    except ImportError:
+        return
+
+    jira_client = JiraClient()
+    projects = [p.strip() for p in settings.get("JIRA_TRACKED_PROJECTS", "").split(",") if p.strip()]
+
+    if not projects:
+        return
+
+    marker = "<!-- AUTO_GENERATED_MISSING_REPRODUCTION_STEPS_WARNING -->"
+    projects_str = ", ".join([f'"{p}"' for p in projects])
+
+    jql = f'project IN ({projects_str}) AND type = Bug AND statusCategory != Done'
+
+    try:
+        issues = jira_client.search_issues(jql, maxResults=100)
+
+        for issue in issues:
+            description = getattr(issue.fields, "description", "") or ""
+
+            # Simple keyword search, could be improved with regex or more complex logic
+            has_reproduction_steps = any(kw in description.lower() for kw in ["steps to reproduce", "reproduce", "steps:"])
+
+            if not has_reproduction_steps:
+                comments = jira_client.get_comments(issue.key)
+                already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
+
+                if not already_warned:
+                    assignee = getattr(issue.fields, "assignee", None)
+                    mention = f"[~accountid:{assignee.accountId}]" if assignee and getattr(assignee, "accountId", None) else "Assignee"
+
+                    message = (
+                        f"{marker}\n"
+                        f"Hi {mention},\n\n"
+                        f"This bug appears to be missing **steps to reproduce** in the description.\n"
+                        f"Please add clear reproduction steps to help developers investigate and fix the issue."
+                    )
+                    jira_client.add_comment(issue.key, message)
+                    logger.info(f"Added missing reproduction steps warning to bug {issue.key}")
+
+    except Exception as e:
+        logger.error(f"Error checking missing reproduction steps for bugs: {e}")
