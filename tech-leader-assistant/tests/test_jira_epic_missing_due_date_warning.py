@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import MagicMock, call
 
 @pytest.mark.asyncio
 async def test_jira_epic_missing_due_date_warning_task_warns(mocker):

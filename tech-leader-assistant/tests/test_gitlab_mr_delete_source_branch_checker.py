@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 from app.tasks import gitlab_mr_delete_source_branch_checker_task
 
 @pytest.fixture

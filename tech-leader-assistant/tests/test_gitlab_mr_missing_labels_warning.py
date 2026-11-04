@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
 from app.tasks import gitlab_mr_missing_labels_warning_task
-import app.tasks
 
 @pytest.fixture(autouse=True)
 def mock_gitlab_env(mocker):

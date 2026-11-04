@@ -1,7 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-import json
 
 @pytest.fixture(autouse=True)
 def mock_astext(monkeypatch):

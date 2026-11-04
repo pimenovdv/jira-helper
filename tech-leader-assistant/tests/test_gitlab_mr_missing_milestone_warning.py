@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import MagicMock, call
 
 @pytest.mark.asyncio
 async def test_gitlab_mr_missing_milestone_warning_task_warns(mocker):

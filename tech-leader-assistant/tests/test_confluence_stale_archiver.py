@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
 from app.tasks import confluence_stale_documentation_archiver_task
-from app import tasks
 from datetime import datetime, timezone, timedelta
 
 @pytest.fixture

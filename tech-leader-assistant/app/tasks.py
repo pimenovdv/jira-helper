@@ -4413,7 +4413,6 @@ async def gitlab_mr_stale_approval_reminder_task():
     """
     import logging
     from datetime import datetime, timezone
-    import dateutil.parser
     from langchain_core.messages import HumanMessage, SystemMessage
     # Use global imports so mocker can patch them in app.tasks
 
@@ -5721,9 +5720,9 @@ async def jira_subtask_missing_assignee_warning_task():
                     continue
 
                 warning_message = (
-                    f"Hi there,\n\n"
-                    f"This subtask is currently unassigned. Please assign it to the appropriate team member to ensure it gets worked on.\n\n"
-                    f"<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_ASSIGNEE_WARNING -->"
+                    "Hi there,\n\n"
+                    "This subtask is currently unassigned. Please assign it to the appropriate team member to ensure it gets worked on.\n\n"
+                    "<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_ASSIGNEE_WARNING -->"
                 )
 
                 # Try to tag the parent assignee if available, or the reporter
@@ -6744,6 +6743,42 @@ async def jira_bug_missing_priority_warning_task():
 
     return f"Jira bug missing priority warning task completed. Warned {warned_count} bugs."
 
+
+async def jira_story_missing_assignee_warning_task():
+    """
+    Checks unresolved Jira stories and adds a warning comment if they lack an assignee.
+    """
+    logger.info("Running Jira story missing assignee warning task.")
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_JIRA_STORY_MISSING_ASSIGNEE_WARNING -->"
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND issuetype = Story AND statusCategory != Done'
+        stories = jira_client.get_issues(jql)
+
+        for story in stories:
+            assignee = getattr(story.fields, "assignee", None)
+
+            if not assignee:
+                comments = jira_client.get_comments(story.key)
+                already_warned = any(marker in c.body for c in comments)
+
+                if not already_warned:
+                    warning_body = (
+                        "It looks like this story doesn't have an assignee. "
+                        "Please assign this story to someone so that it can be worked on.\n\n"
+                        f"{marker}"
+                    )
+                    jira_client.add_comment(story.key, warning_body)
+                    logger.info(f"Added missing assignee warning to story {story.key}")
+
+    return "Jira story missing assignee warning task completed"
 
 async def jira_task_missing_description_warning_task():
     """

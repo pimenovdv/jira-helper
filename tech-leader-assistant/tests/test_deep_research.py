@@ -1,8 +1,7 @@
 import pytest
-from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 from app.main import app
-from app.deep_research import Plan, SubTask, ReviewDecision
+from app.deep_research import SubTask
 
 client = TestClient(app)
 

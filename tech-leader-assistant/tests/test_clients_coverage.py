@@ -1,4 +1,3 @@
-import pytest
 from app.clients.gitlab_client import GitLabClient
 from app.clients.confluence_client import ConfluenceClient
 from app.clients.jira_client import JiraClient

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 from app.tasks import jira_bug_missing_priority_warning_task
 
 @pytest.fixture(autouse=True)

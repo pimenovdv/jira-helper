@@ -20,23 +20,23 @@ class JiraClient(BaseClient):
     def get_project_versions(self, project_key: str):
         try:
             return self.client.project_versions(project_key)
-        except Exception as e:
+        except Exception:
             return []
 
     def search_issues(self, jql: str):
         try:
             return self.client.search_issues(jql, maxResults=100)
-        except Exception as e:
+        except Exception:
             return []
 
     def get_comments(self, issue_key: str):
         try:
             return self.client.comments(issue_key)
-        except Exception as e:
+        except Exception:
             return []
 
     def add_comment(self, issue_key: str, body: str):
         try:
             return self.client.add_comment(issue_key, body)
-        except Exception as e:
+        except Exception:
             return None

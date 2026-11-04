@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from app.tasks import _save_event, gitlab_sync_task, confluence_auto_link_task, jira_sync_task
-import datetime
 
 @pytest.fixture(autouse=True)
 def patch_astext(monkeypatch):
@@ -94,5 +93,5 @@ async def test_jira_sync_task_coverage(mocker):
 
     try:
         await jira_sync_task()
-    except Exception as e:
+    except Exception:
         pass

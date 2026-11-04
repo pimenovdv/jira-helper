@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import MagicMock
-from langchain_core.messages import HumanMessage
 from app.tasks import gitlab_mr_missing_reviewer_notifier_task
 
 @pytest.mark.asyncio
