@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON, MetaData
+from sqlalchemy import Column, Integer, String, DateTime, JSON
 from app.database import Base
 
 class Event(Base):

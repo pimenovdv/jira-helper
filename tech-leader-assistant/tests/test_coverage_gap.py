@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.clients import settings
 from unittest.mock import MagicMock
-import json
 
 from app.main import get_db
 

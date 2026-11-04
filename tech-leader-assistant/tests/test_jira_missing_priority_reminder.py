@@ -1,8 +1,6 @@
 import pytest
-import logging
 from unittest.mock import MagicMock
 from app.tasks import jira_missing_priority_reminder_task
-from langchain_core.messages import SystemMessage, HumanMessage
 
 @pytest.fixture
 def mock_settings(mocker):

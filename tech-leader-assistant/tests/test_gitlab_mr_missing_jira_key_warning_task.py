@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 from app.tasks import gitlab_mr_missing_jira_key_warning_task
 
 @pytest.fixture

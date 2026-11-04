@@ -1103,7 +1103,6 @@ async def test_gitlab_stale_draft_mr_closer_task(mocker, mock_settings):
     mock_mr.draft = True
 
     # 40 days ago
-    from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
     updated_at = now - timedelta(days=40)
     mock_mr.updated_at = updated_at.isoformat()
@@ -1388,7 +1387,6 @@ async def test_jira_stale_epic_reminder_task_no_api_key(mocker, mock_settings):
 @pytest.mark.asyncio
 async def test_confluence_stale_page_reminder_task(mocker, monkeypatch):
     from app.tasks import confluence_stale_page_reminder_task
-    from datetime import datetime, timezone, timedelta
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
@@ -1454,7 +1452,6 @@ async def test_confluence_stale_page_reminder_task(mocker, monkeypatch):
 @pytest.mark.asyncio
 async def test_confluence_stale_page_reminder_task_already_reminded(mocker, monkeypatch):
     from app.tasks import confluence_stale_page_reminder_task
-    from datetime import datetime, timezone, timedelta
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
@@ -1554,7 +1551,6 @@ async def test_confluence_stale_page_reminder_task_no_spaces(mocker, monkeypatch
 @pytest.mark.asyncio
 async def test_confluence_stale_architecture_review_reminder_task(mocker, monkeypatch):
     from app.tasks import confluence_stale_architecture_review_reminder_task
-    from datetime import datetime, timezone, timedelta
 
     def mock_settings_get(key, default=""):
         if key == "CONFLUENCE_TRACKED_SPACES":
@@ -1633,7 +1629,6 @@ async def test_confluence_stale_architecture_review_reminder_task(mocker, monkey
 @pytest.mark.asyncio
 async def test_confluence_stale_architecture_review_reminder_task_already_reminded(mocker, monkeypatch):
     from app.tasks import confluence_stale_architecture_review_reminder_task
-    from datetime import datetime, timezone, timedelta
 
     def mock_settings_get(key, default=""):
         if key == "CONFLUENCE_TRACKED_SPACES":

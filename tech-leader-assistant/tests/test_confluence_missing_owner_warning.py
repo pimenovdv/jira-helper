@@ -159,7 +159,6 @@ async def test_exception_handling(mock_dependencies):
     assert "completed" in res
 
 import pytest
-from app.tasks import confluence_missing_owner_warning_task
 
 @pytest.mark.asyncio
 async def test_confluence_missing_owner_warning_coverage_no_spaces(mocker):

@@ -4413,7 +4413,6 @@ async def gitlab_mr_stale_approval_reminder_task():
     """
     import logging
     from datetime import datetime, timezone
-    import dateutil.parser
     from langchain_core.messages import HumanMessage, SystemMessage
     # Use global imports so mocker can patch them in app.tasks
 
@@ -5721,9 +5720,9 @@ async def jira_subtask_missing_assignee_warning_task():
                     continue
 
                 warning_message = (
-                    f"Hi there,\n\n"
-                    f"This subtask is currently unassigned. Please assign it to the appropriate team member to ensure it gets worked on.\n\n"
-                    f"<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_ASSIGNEE_WARNING -->"
+                    "Hi there,\n\n"
+                    "This subtask is currently unassigned. Please assign it to the appropriate team member to ensure it gets worked on.\n\n"
+                    "<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_ASSIGNEE_WARNING -->"
                 )
 
                 # Try to tag the parent assignee if available, or the reporter

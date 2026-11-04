@@ -1,9 +1,9 @@
 import pytest
 from app.deep_research import (
     planner_node, worker_node, reviewer_node, synthesizer_node, reviewer_router,
-    DeepResearchState, SubTask, Plan, ReviewDecision
+    SubTask, Plan, ReviewDecision
 )
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage
 
 @pytest.fixture
 def mock_llms(mocker):

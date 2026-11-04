@@ -1,4 +1,4 @@
-from typing import TypedDict, List, Annotated, Dict, Any, Optional
+from typing import TypedDict, List, Annotated, Dict, Optional
 import operator
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI

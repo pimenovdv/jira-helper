@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from app.tasks import automated_code_review_task
 from langchain_core.messages import AIMessage
 

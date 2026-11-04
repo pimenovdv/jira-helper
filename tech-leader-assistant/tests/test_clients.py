@@ -1,4 +1,3 @@
-import pytest
 
 def test_gitlab_ping(mocker):
     # Mock settings

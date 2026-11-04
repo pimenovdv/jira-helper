@@ -1,7 +1,6 @@
 import pytest
 from playwright.async_api import async_playwright
 import uvicorn
-import asyncio
 from app.main import app
 import multiprocessing
 import time

@@ -1,8 +1,6 @@
 import pytest
-from unittest.mock import MagicMock, call
-import asyncio
+from unittest.mock import MagicMock
 from app.tasks import gitlab_mr_missing_labels_notifier_task
-from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
 async def test_gitlab_mr_missing_labels_notifier_success(mocker):

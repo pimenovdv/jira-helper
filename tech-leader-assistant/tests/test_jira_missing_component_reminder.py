@@ -1,6 +1,5 @@
 import pytest
 import logging
-from unittest.mock import MagicMock
 from app.tasks import jira_missing_component_reminder_task
 from app.clients import settings
 

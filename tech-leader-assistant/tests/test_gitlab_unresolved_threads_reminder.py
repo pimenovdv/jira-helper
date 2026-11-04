@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import MagicMock
-import app.tasks as tasks
 from app.tasks import gitlab_unresolved_threads_reminder_task
 import datetime
 

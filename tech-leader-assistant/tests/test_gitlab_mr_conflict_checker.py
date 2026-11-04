@@ -1,5 +1,4 @@
 import pytest
-import logging
 from unittest.mock import MagicMock
 from app.tasks import gitlab_mr_conflict_checker_task
 

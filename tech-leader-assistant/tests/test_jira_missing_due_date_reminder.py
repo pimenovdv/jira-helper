@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import MagicMock
-from langchain_core.messages import SystemMessage, HumanMessage
 from app.tasks import jira_missing_due_date_reminder_task
 
 @pytest.fixture

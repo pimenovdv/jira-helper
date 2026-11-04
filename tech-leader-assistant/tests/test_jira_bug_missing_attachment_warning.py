@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
 from app.tasks import jira_bug_missing_attachment_warning_task
-from app import tasks
 
 @pytest.fixture
 def mock_jira_client(mocker):
