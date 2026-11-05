@@ -6744,6 +6744,41 @@ async def jira_bug_missing_priority_warning_task():
     return f"Jira bug missing priority warning task completed. Warned {warned_count} bugs."
 
 
+async def jira_story_missing_priority_warning_task():
+    """
+    Checks unresolved Jira stories and adds a warning comment if they lack a priority.
+    """
+    logger.info("Running Jira story missing priority warning task.")
+
+    jira_client = JiraClient()
+    jira_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    marker = "<!-- AUTO_GENERATED_JIRA_STORY_MISSING_PRIORITY_WARNING -->"
+
+    for j_proj in jira_projects:
+        j_proj = j_proj.strip()
+        if not j_proj:
+            continue
+
+        jql = f'project = "{j_proj}" AND issuetype = Story AND statusCategory != Done'
+        stories = jira_client.get_issues(jql)
+
+        for story in stories:
+            priority = getattr(story.fields, "priority", None)
+
+            if not priority:
+                comments = jira_client.get_comments(story.key)
+                already_warned = any(marker in c.body for c in comments)
+
+                if not already_warned:
+                    warning_body = (
+                        "It looks like this story doesn't have a priority set. "
+                        "Please assign a priority so we know how urgent it is.\n\n"
+                        f"{marker}"
+                    )
+                    jira_client.add_comment(story.key, warning_body)
+                    logger.info(f"Added missing priority warning to {story.key}")
+
+
 async def jira_story_missing_assignee_warning_task():
     """
     Checks unresolved Jira stories and adds a warning comment if they lack an assignee.
