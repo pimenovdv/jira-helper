@@ -526,6 +526,16 @@ def setup_scheduler():
     from app.tasks import jira_story_missing_description_warning_task
     from app.tasks import jira_task_missing_description_warning_task
     from app.tasks import jira_story_missing_assignee_warning_task
+    from app.tasks import jira_story_missing_priority_warning_task
+
+    scheduler.add_job(
+        jira_story_missing_priority_warning_task,
+        "cron",
+        hour=11,
+        minute=15,
+        id="jira_story_missing_priority_warning_task",
+        replace_existing=True,
+    )
 
     scheduler.add_job(
         jira_task_missing_description_warning_task,
