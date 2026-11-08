@@ -7540,6 +7540,56 @@ async def jira_task_missing_assignee_warning_task():
 
     return f"Jira task missing assignee warning task completed. Warned {warned_count} tasks."
 
+async def jira_task_missing_estimate_warning_task():
+    """
+    Phase 107: Jira Task Missing Estimate Warning
+    Checks active Jira Task issues to ensure they have an original estimate.
+    If a Task lacks an estimate, a bot comment is added.
+    """
+    import logging
+    from app.clients.jira_client import JiraClient
+    from bs4 import BeautifulSoup
+    from app.clients import settings
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira task missing estimate warning task.")
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_TASK_MISSING_ESTIMATE_WARNING -->"
+    warned_count = 0
+
+    for j_proj in tracked_projects:
+        try:
+            # Active tasks: not done, type Task
+            jql = f'project = "{j_proj}" AND issuetype = "Task" AND statusCategory != Done'
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                estimate = getattr(issue.fields, "timeoriginalestimate", None)
+
+                # Check if estimate is missing
+                if estimate is None:
+                    comments = jira_client.get_comments(issue.key)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
+
+                    if not already_warned:
+                        message = (
+                            f"{marker}\n"
+                            f"⚠️ **Warning**: This Task is missing an original estimate. "
+                            f"Please provide an estimate so we can track capacity appropriately."
+                        )
+                        jira_client.add_comment(issue.key, message)
+                        warned_count += 1
+                        logger.info(f"Added missing estimate warning to Task {issue.key}.")
+
+        except Exception as e:
+            logger.error(f"Error checking missing estimate in project {j_proj}: {e}")
+
+    logger.info(f"Finished checking Tasks for missing estimates. Warned {warned_count} tasks.")
+
+
 async def jira_task_missing_priority_warning_task():
     """
     Phase 106: Jira Task Missing Priority Warning
