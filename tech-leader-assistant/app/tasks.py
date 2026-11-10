@@ -7641,6 +7641,55 @@ async def jira_task_missing_priority_warning_task():
     return f"Jira task missing priority warning task completed. Warned {warned_count} tasks."
 
 
+async def jira_epic_missing_assignee_warning_task():
+    """
+    Phase 109: Jira Epic Missing Assignee Warning
+    Checks active Jira Epic issues to ensure they have an assignee.
+    If an Epic lacks an assignee, a bot comment is added.
+    """
+    import logging
+    from app.clients.jira_client import JiraClient
+    from app.clients import settings
+    from bs4 import BeautifulSoup
+
+    logger = logging.getLogger(__name__)
+    logger.info("Running Jira epic missing assignee warning task.")
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    marker = "<!-- AUTO_GENERATED_EPIC_MISSING_ASSIGNEE_WARNING -->"
+    warned_count = 0
+
+    for j_proj in tracked_projects:
+        try:
+            # Active epics: not done, type Epic
+            jql = f'project = "{j_proj}" AND issuetype = "Epic" AND statusCategory != Done'
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                assignee = getattr(issue.fields, "assignee", None)
+
+                # Check if assignee is missing
+                if not assignee:
+                    comments = jira_client.get_comments(issue.key)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in BeautifulSoup(getattr(c, "body", ""), "html.parser").get_text()) for c in comments)
+
+                    if not already_warned:
+                        warning_message = (
+                            f"⚠️ **Warning**: This Epic is missing an assignee.\n"
+                            f"Please assign it to a team member so someone is accountable for it.\n\n"
+                            f"{marker}"
+                        )
+                        jira_client.add_comment(issue.key, warning_message)
+                        logger.info(f"Added missing assignee warning to Epic {issue.key}")
+                        warned_count += 1
+        except Exception as e:
+            logger.error(f"Error checking epic assignee for project {j_proj}: {e}")
+
+    return f"Jira epic missing assignee warning task completed. Warned {warned_count} epics."
+
+
 async def jira_bug_missing_assignee_warning_task():
     """
     Phase 108: Jira Bug Missing Assignee Warning
