@@ -7737,3 +7737,46 @@ async def jira_bug_missing_assignee_warning_task():
             logger.error(f"Error checking bug assignee for project {j_proj}: {e}")
 
     return f"Jira bug missing assignee warning task completed. Warned {warned_count} bugs."
+
+
+async def jira_subtask_missing_priority_warning_task():
+    """
+    Phase 110: Jira Subtask Missing Priority Warning
+    Checks active Jira Sub-task issues to ensure they have a priority.
+    """
+    from app.clients.jira_client import JiraClient
+    logger.info("Running Jira subtask missing priority warning task.")
+
+    jira_client = JiraClient()
+    tracked_projects = settings.get("JIRA_TRACKED_PROJECTS", "").split(",")
+    tracked_projects = [p.strip() for p in tracked_projects if p.strip()]
+
+    warned_count = 0
+    marker = "<!-- AUTO_GENERATED_JIRA_SUBTASK_MISSING_PRIORITY_WARNING -->"
+
+    for j_proj in tracked_projects:
+        try:
+            # Active subtasks: not done, type Sub-task
+            jql = f'project = "{j_proj}" AND issuetype = "Sub-task" AND statusCategory != Done'
+            issues = jira_client.search_issues(jql)
+            for issue in issues:
+                priority = getattr(issue.fields, "priority", None)
+
+                # Check if priority is missing
+                if not priority:
+                    comments = jira_client.get_comments(issue.key)
+                    already_warned = any((marker in getattr(c, "body", "") or marker in getattr(c, "body", "")) for c in comments)
+
+                    if not already_warned:
+                        warning_message = (
+                            f"⚠️ **Warning**: This Sub-task is missing a priority.\n"
+                            f"Please set a priority to help with task organization.\n\n"
+                            f"{marker}"
+                        )
+                        jira_client.add_comment(issue.key, warning_message)
+                        logger.info(f"Added missing priority warning to Sub-task {issue.key}")
+                        warned_count += 1
+        except Exception as e:
+            logger.error(f"Error checking subtask priority for project {j_proj}: {e}")
+
+    return f"Jira subtask missing priority warning task completed. Warned {warned_count} subtasks."
